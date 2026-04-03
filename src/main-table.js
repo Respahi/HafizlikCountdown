@@ -19,6 +19,7 @@ import {
   openScenarioView,
   persistState,
   render,
+  renderTabbedPanels,
   renderCompletionModal,
   shiftHamSelection,
   setForecastEndDate,
@@ -36,6 +37,7 @@ function bindMainEvents() {
   const scenarioButton = document.getElementById('scenario-button')
   const closeCompletionButton = document.getElementById('close-completion-modal')
   const resetButton = document.getElementById('reset-button')
+  const tabButtons = document.querySelectorAll('[data-view-tab]')
   const syncHamCountValue = () => {
     hamCountValue.textContent = getHamSelectionLabel(state.inputHamCount)
   }
@@ -137,6 +139,12 @@ function bindMainEvents() {
 
   scenarioButton.addEventListener('click', openScenarioView)
 
+  tabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      renderTabbedPanels(button.dataset.viewTab)
+    })
+  })
+
   if (resetButton) {
     resetButton.addEventListener('click', () => {
       state.pace = 0
@@ -176,6 +184,12 @@ export function renderMainView() {
   app.innerHTML = `
     <main class="layout">
       <section class="board-panel">
+        <div class="folder-tabs folder-tabs-main" aria-label="Sayfa sekmeleri">
+          <button class="folder-tab folder-tab-active" data-view-tab="main" type="button">Ana Tablo</button>
+          <button class="folder-tab" data-view-tab="scenario" type="button">Hayali Senaryo</button>
+          <button class="folder-tab" data-view-tab="history" type="button">Geçmişin Hesabı</button>
+        </div>
+
         <div class="board-heading">
           <div>
             <p class="eyebrow">Osmanlı Usulü Hafızlık</p>

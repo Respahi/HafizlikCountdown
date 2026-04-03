@@ -21,6 +21,7 @@ import {
   isScenarioPastStartDay,
   parseDateKey,
   projectScenarioOutcome,
+  renderTabbedPanels,
   renderScenarioDate,
 } from './main.js'
 
@@ -38,6 +39,7 @@ function bindScenarioEvents() {
   const optionButtons = document.querySelectorAll('.scenario-option')
   const hamButtons = document.querySelectorAll('[data-ham]')
   const backButton = document.getElementById('back-to-main')
+  const tabButtons = document.querySelectorAll('[data-view-tab]')
 
   optionButtons.forEach((button) => {
     if (button.dataset.ham) {
@@ -53,6 +55,12 @@ function bindScenarioEvents() {
     button.addEventListener('click', () => {
       const value = button.dataset.ham === 'repeat' ? 'repeat' : Number(button.dataset.ham)
       applyHamSelection(value)
+    })
+  })
+
+  tabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      renderTabbedPanels(button.dataset.viewTab)
     })
   })
 
@@ -77,6 +85,12 @@ export function renderScenarioView() {
   app.innerHTML = `
     <main class="scenario-layout">
       <section class="scenario-main">
+        <div class="folder-tabs folder-tabs-scenario" aria-label="Sayfa sekmeleri">
+          <button class="folder-tab" data-view-tab="main" type="button">Ana Tablo</button>
+          <button class="folder-tab folder-tab-active" data-view-tab="scenario" type="button">Hayali Senaryo</button>
+          <button class="folder-tab" data-view-tab="history" type="button">Geçmişin Hesabı</button>
+        </div>
+
         <header class="scenario-header">
           <div>
             <p class="eyebrow">Simülasyon</p>

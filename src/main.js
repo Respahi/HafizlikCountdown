@@ -1,6 +1,7 @@
 import './style.css'
 import { renderMainView } from './main-table.js'
 import { renderScenarioView } from './scenario-view.js'
+import { renderHistoryView } from './history-view.js'
 
 const ROWS = 20
 const COLUMNS = 30
@@ -956,6 +957,16 @@ function openScenarioView() {
   render()
 }
 
+function openMainView() {
+  state.view = 'main'
+  render()
+}
+
+function openHistoryView() {
+  state.view = 'history'
+  render()
+}
+
 function applyScenarioChoice(selectedGreenCount) {
   const scenario = state.scenario
 
@@ -1135,7 +1146,7 @@ function applyScenarioChoice(selectedGreenCount) {
   }, revealDuration)
 }
 
-function commitScenarioToMain() {
+function commitScenarioToMain(nextView = 'main') {
   clearScenarioTimers()
   const previousFilledCount = state.filledCount
   const previousDisplayEndDate = getProjectedEndDate(TOTAL_CELLS - previousFilledCount, state.spentStudyDays)
@@ -1153,12 +1164,35 @@ function commitScenarioToMain() {
   state.carryRedCount = projected.pendingRedCount
   state.spentStudyDays = projected.spentStudyDays
   state.scenario = null
-  state.view = 'main'
+  state.view = nextView
   state.animate = false
   setForecastEndDate(displayEndDate)
   syncCompletionState(previousFilledCount, state.filledCount, displayEndDate)
   persistState()
   render()
+}
+
+function renderTabbedPanels(nextView) {
+  if (!nextView || nextView === state.view) {
+    return
+  }
+
+  if (state.view === 'scenario' && nextView !== 'scenario') {
+    commitScenarioToMain(nextView)
+    return
+  }
+
+  if (nextView === 'scenario') {
+    openScenarioView()
+    return
+  }
+
+  if (nextView === 'history') {
+    openHistoryView()
+    return
+  }
+
+  openMainView()
 }
 
 function projectScenarioOutcome() {
@@ -1311,6 +1345,11 @@ export function render() {
     return
   }
 
+  if (state.view === 'history') {
+    renderHistoryView()
+    return
+  }
+
   renderMainView()
 }
 
@@ -1367,9 +1406,12 @@ export {
   getScenarioBoundarySelectableHamLimit,
   doesScenarioChoiceIncludeSunday,
   isScenarioPastStartDay,
+  openMainView,
+  openHistoryView,
   openScenarioView,
   parseDateKey,
   projectScenarioOutcome,
+  renderTabbedPanels,
   renderCompletionModal,
   renderScenarioDate,
   shiftHamSelection,
