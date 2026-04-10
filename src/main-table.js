@@ -116,10 +116,22 @@ function bindMainEvents() {
     state.committedMarks = []
     state.carryRedCount = 0
     state.spentStudyDays = 0
+    state.closedStudyDays = 0
     state.animate = false
     state.preferredScenarioHam = rawJuz !== 30 ? rawHamCount : null
+    state.preferredScenarioMode = null
+    state.preferredScenarioLessonCount = null
+    state.preferredScenarioSundayEnabled = false
+    state.preferredScenarioHolidayEnabled = false
+    state.completedScenarioView = null
     state.scenario = null
-    const nextDisplayEndDate = estimateProjectedEndDate(TOTAL_CELLS - state.filledCount, state.spentStudyDays)
+    state.history.inputPace = rawPace
+    state.history.inputJuz = rawJuz
+    state.history.inputHamCount = rawHamCount === 'repeat' ? 1 : getHamSelectionNumericValue(rawHamCount)
+    state.history.reportReady = false
+    state.history.reportAttempted = false
+    state.history.reportBasis = null
+    const nextDisplayEndDate = estimateProjectedEndDate(TOTAL_CELLS - state.filledCount, state.spentStudyDays, state.closedStudyDays)
     setForecastEndDate(nextDisplayEndDate)
     syncCompletionState(previousFilledCount, state.filledCount, nextDisplayEndDate)
 
@@ -158,11 +170,34 @@ function bindMainEvents() {
       state.committedMarks = []
       state.carryRedCount = 0
       state.spentStudyDays = 0
+      state.closedStudyDays = 0
       state.forecastEndDateKey = null
       state.completionDateKey = null
       state.completionModalOpen = false
       state.preferredScenarioHam = null
+      state.preferredScenarioMode = null
+      state.preferredScenarioLessonCount = null
+      state.preferredScenarioSundayEnabled = false
+      state.preferredScenarioHolidayEnabled = false
+      state.completedScenarioView = null
       state.scenario = null
+      state.history = {
+        inputPace: 1,
+        inputJuz: 0,
+        inputHamCount: 1,
+        startDateKey: null,
+        startDateText: '',
+        phaseCounts: {
+          2: 0,
+          3: 0,
+          4: 0,
+          5: 0,
+        },
+        activeYear: new Date().getFullYear(),
+        reportReady: false,
+        reportAttempted: false,
+        reportBasis: null,
+      }
       persistState()
       render()
     })
@@ -177,25 +212,20 @@ export function renderMainView() {
   const filledCount = state.filledCount
   const remainingPages = TOTAL_CELLS - filledCount
   const percent = ((filledCount / TOTAL_CELLS) * 100).toFixed(1)
-  const estimate = estimateCompletion(remainingPages, state.spentStudyDays)
-  const displayEndDate = getProjectedEndDate(remainingPages, state.spentStudyDays)
+  const estimate = estimateCompletion(remainingPages, state.spentStudyDays, state.closedStudyDays)
+  const displayEndDate = getProjectedEndDate(remainingPages, state.spentStudyDays, state.closedStudyDays)
   const markMap = getMarkMap(state.committedMarks)
 
   app.innerHTML = `
     <main class="layout">
       <section class="board-panel">
-        <div class="folder-tabs folder-tabs-main" aria-label="Sayfa sekmeleri">
-          <button class="folder-tab folder-tab-active" data-view-tab="main" type="button">Ana Tablo</button>
-          <button class="folder-tab" data-view-tab="scenario" type="button">Hayali Senaryo</button>
-          <button class="folder-tab" data-view-tab="history" type="button">Geçmişin Hesabı</button>
-        </div>
-
-        <div class="board-heading">
-          <div>
-            <p class="eyebrow">Osmanlı Usulü Hafızlık</p>
-            <h1>Hafızlık Ne Zaman Biter</h1>
+        <div class="view-topbar">
+          <div class="folder-tabs folder-tabs-main" aria-label="Sayfa sekmeleri">
+            <button class="folder-tab folder-tab-active" data-view-tab="main" type="button">Ana Tablo</button>
+            <button class="folder-tab" data-view-tab="scenario" type="button">Hayali Senaryo</button>
+            <button class="folder-tab" data-view-tab="history" type="button">Geçmişin Hesabı</button>
           </div>
-          <div class="board-note">
+          <div class="board-note board-note-topbar">
             <span class="board-note-label">Tahmini bitiş tarihi</span>
             <strong class="board-note-date">${formatDate(displayEndDate)}</strong>
           </div>

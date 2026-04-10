@@ -51,21 +51,34 @@ const HAM_CONFIG = {
 }
 
 const RELIGIOUS_HOLIDAYS = {
+  2024: {
+    ramadan: ['2024-04-08', '2024-04-09', '2024-04-10', '2024-04-11', '2024-04-12', '2024-04-13', '2024-04-14'],
+    sacrifice: ['2024-06-15', '2024-06-16', '2024-06-17', '2024-06-18', '2024-06-19'],
+  },
+  2025: {
+    ramadan: ['2025-03-29', '2025-03-30', '2025-03-31', '2025-04-01', '2025-04-02', '2025-04-03', '2025-04-04', '2025-04-05', '2025-04-06'],
+    sacrifice: ['2025-06-05', '2025-06-06', '2025-06-07', '2025-06-08', '2025-06-09'],
+  },
   2026: {
     ramadan: ['2026-03-19', '2026-03-20', '2026-03-21', '2026-03-22', '2026-03-23'],
     sacrifice: ['2026-05-26', '2026-05-27', '2026-05-28', '2026-05-29', '2026-05-30'],
   },
   2027: {
     ramadan: ['2027-03-09', '2027-03-10', '2027-03-11', '2027-03-12'],
-    sacrifice: ['2027-05-16', '2027-05-17', '2027-05-18', '2027-05-19'],
+    sacrifice: ['2027-05-15', '2027-05-16', '2027-05-17', '2027-05-18', '2027-05-19'],
   },
   2028: {
     ramadan: ['2028-02-26', '2028-02-27', '2028-02-28', '2028-02-29'],
     sacrifice: ['2028-05-04', '2028-05-05', '2028-05-06', '2028-05-07', '2028-05-08'],
   },
+  2029: {
+    ramadan: ['2029-02-14', '2029-02-15', '2029-02-16', '2029-02-17'],
+    sacrifice: ['2029-04-23', '2029-04-24', '2029-04-25', '2029-04-26', '2029-04-27'],
+  },
 }
 
 const savedState = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+const savedHistory = savedState.history ?? {}
 const normalizedSavedMarks = Array.isArray(savedState.committedMarks)
   ? savedState.committedMarks.map((mark) => ({
       progressIndex: clampNumber(mark.progressIndex ?? 0, 0, TOTAL_CELLS),
@@ -78,6 +91,34 @@ const normalizedSavedMarks = Array.isArray(savedState.committedMarks)
         badgeValue: badge.value ?? null,
       }))
     : []
+
+const defaultHistoryStartDateKey = typeof savedHistory.startDateKey === 'string' ? savedHistory.startDateKey : null
+const defaultHistoryInputHamCount = getHistoryCurrentHamValue(savedHistory.inputHamCount ?? savedState.inputHamCount ?? 1)
+const savedCompletedScenarioView = savedState.completedScenarioView && typeof savedState.completedScenarioView === 'object'
+  ? {
+      entries: Array.isArray(savedState.completedScenarioView.entries)
+        ? savedState.completedScenarioView.entries.map((entry) => ({
+            type: entry.type,
+            dateKey: String(entry.dateKey ?? ''),
+            hamLevel: entry.hamLevel === 'repeat' ? 'repeat' : clampNumber(entry.hamLevel ?? 1, 1, 5),
+            gain: clampNumber(entry.gain ?? 0, 0, 5),
+            isSundayStudy: entry.isSundayStudy === true,
+            isHolidayStudy: entry.isHolidayStudy === true,
+            blackFill: entry.blackFill === true,
+          })).filter((entry) => entry.dateKey)
+        : [],
+      startDateKey: typeof savedState.completedScenarioView.startDateKey === 'string' ? savedState.completedScenarioView.startDateKey : null,
+      startMonthStartKey: typeof savedState.completedScenarioView.startMonthStartKey === 'string' ? savedState.completedScenarioView.startMonthStartKey : null,
+      finalMonthStartKey: typeof savedState.completedScenarioView.finalMonthStartKey === 'string' ? savedState.completedScenarioView.finalMonthStartKey : null,
+      completedEndDateKey: typeof savedState.completedScenarioView.completedEndDateKey === 'string' ? savedState.completedScenarioView.completedEndDateKey : null,
+      mode: savedState.completedScenarioView.mode === 'monthly' ? 'monthly' : 'weekly',
+      selectedWeeklyLessonCount: savedState.completedScenarioView.selectedWeeklyLessonCount == null
+        ? null
+        : clampNumber(savedState.completedScenarioView.selectedWeeklyLessonCount, 0, 7),
+      includeSundayStudy: savedState.completedScenarioView.includeSundayStudy === true,
+      includeHolidayStudy: savedState.completedScenarioView.includeHolidayStudy === true,
+    }
+  : null
 
 const state = {
   pace: clampNumber(savedState.pace ?? 0, 0, ROWS),
@@ -99,6 +140,7 @@ const state = {
   committedMarks: normalizedSavedMarks,
   carryRedCount: clampNumber(savedState.carryRedCount ?? 0, 0, 999),
   spentStudyDays: clampNumber(savedState.spentStudyDays ?? 0, 0, 9999),
+  closedStudyDays: clampNumber(savedState.closedStudyDays ?? 0, 0, 9999),
   view: 'main',
   scenario: null,
   forecastEndDateKey: typeof savedState.forecastEndDateKey === 'string' ? savedState.forecastEndDateKey : null,
@@ -107,6 +149,47 @@ const state = {
   preferredScenarioHam: savedState.preferredScenarioHam === 'repeat'
     ? 'repeat'
     : (savedState.preferredScenarioHam != null ? clampNumber(savedState.preferredScenarioHam, 1, 5) : null),
+  preferredScenarioMode: savedState.preferredScenarioMode === 'monthly'
+    ? 'monthly'
+    : (savedState.preferredScenarioMode === 'weekly' ? 'weekly' : null),
+  preferredScenarioLessonCount: savedState.preferredScenarioLessonCount == null
+    ? null
+    : clampNumber(savedState.preferredScenarioLessonCount, 0, 7),
+  preferredScenarioSundayEnabled: savedState.preferredScenarioSundayEnabled === true,
+  preferredScenarioHolidayEnabled: savedState.preferredScenarioHolidayEnabled === true,
+  completedScenarioView: savedCompletedScenarioView,
+  history: {
+    inputPace: clampNumber(
+      savedHistory.inputPace ?? savedState.inputPace ?? savedState.pace ?? 1,
+      0,
+      ROWS,
+    ),
+    inputJuz: clampNumber(
+      savedHistory.inputJuz ?? savedState.inputJuz ?? savedState.juz ?? 0,
+      0,
+      COLUMNS,
+    ),
+    inputHamCount: defaultHistoryInputHamCount,
+    startDateKey: defaultHistoryStartDateKey,
+    startDateText: typeof savedHistory.startDateText === 'string'
+      ? savedHistory.startDateText
+      : formatDateInputText(defaultHistoryStartDateKey),
+    phaseCounts: normalizeHistoryPhaseCounts(savedHistory.phaseCounts),
+    activeYear: clampNumber(
+      savedHistory.activeYear ?? (defaultHistoryStartDateKey ? parseDateKey(defaultHistoryStartDateKey).getFullYear() : new Date().getFullYear()),
+      1900,
+      3000,
+    ),
+    reportReady: savedHistory.reportReady === true,
+    reportAttempted: savedHistory.reportAttempted === true,
+    reportBasis: savedHistory.reportBasis && typeof savedHistory.reportBasis === 'object'
+      ? {
+          pace: clampNumber(savedHistory.reportBasis.pace ?? 1, 0, ROWS),
+          juz: clampNumber(savedHistory.reportBasis.juz ?? 0, 0, COLUMNS),
+          hamCount: normalizeHamSelection(savedHistory.reportBasis.hamCount ?? 1),
+        }
+      : null,
+  },
 }
 
 const app = document.querySelector('#app')
@@ -114,6 +197,7 @@ let scenarioDateTimer = null
 let scenarioRevealTimer = null
 let scenarioRollTimer = null
 let scenarioIncomingTimer = null
+let scenarioAutoTimer = null
 
 function normalizeHamSelection(value, fallback = 1) {
   if (value === 'repeat') {
@@ -131,6 +215,54 @@ function normalizeHamSelection(value, fallback = 1) {
   }
 
   return Math.min(Math.max(parsed, 1), 5)
+}
+
+function normalizeHistoryPhaseCounts(value) {
+  return {
+    2: clampNumber(value?.[2] ?? value?.two ?? 0, 0, 20),
+    3: clampNumber(value?.[3] ?? value?.three ?? 0, 0, 20),
+    4: clampNumber(value?.[4] ?? value?.four ?? 0, 0, 20),
+    5: clampNumber(value?.[5] ?? value?.five ?? 0, 0, 20),
+  }
+}
+
+function getHistoryCurrentHamValue(value) {
+  const normalized = normalizeHamSelection(value, 1)
+  return normalized === 'repeat' ? 1 : normalized
+}
+
+function formatDateInputText(dateKey) {
+  if (!dateKey) {
+    return ''
+  }
+
+  const date = parseDateKey(dateKey)
+  return `${padNumber(date.getDate())}/${padNumber(date.getMonth() + 1)}/${date.getFullYear()}`
+}
+
+function parseDateInputText(text) {
+  const normalized = String(text ?? '').replace(/[^\d/]/g, '').trim()
+  const match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+
+  if (!match) {
+    return null
+  }
+
+  const [, dayText, monthText, yearText] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const candidate = new Date(year, month - 1, day)
+
+  if (
+    candidate.getFullYear() !== year
+    || candidate.getMonth() !== month - 1
+    || candidate.getDate() !== day
+  ) {
+    return null
+  }
+
+  return toDateKey(candidate)
 }
 
 function getHamSelectionNumericValue(value) {
@@ -264,16 +396,10 @@ function formatMonthYear(date) {
 }
 
 function getDateParts(date) {
-  const parts = new Intl.DateTimeFormat('tr-TR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).formatToParts(date)
-
   return {
-    day: parts.find((part) => part.type === 'day')?.value ?? '',
-    month: parts.find((part) => part.type === 'month')?.value ?? '',
-    year: parts.find((part) => part.type === 'year')?.value ?? '',
+    day: padNumber(date.getDate()),
+    month: padNumber(date.getMonth() + 1),
+    year: String(date.getFullYear()),
   }
 }
 
@@ -293,11 +419,11 @@ function renderScenarioDate(currentDate, previousDate, version, widthReferenceDa
 
   if (!previousDate) {
     return `
-      ${renderStaticPart(current.day, [current.day, widthReference?.day])}
-      <span class="scenario-date-separator"> </span>
-      ${renderStaticPart(current.month, [current.month, widthReference?.month])}
-      <span class="scenario-date-separator"> </span>
-      ${renderStaticPart(current.year, [current.year, widthReference?.year])}
+      ${renderStaticPart(current.day, [current.day])}
+      <span class="scenario-date-separator">.</span>
+      ${renderStaticPart(current.month, [current.month, widthReference?.month, '12'])}
+      <span class="scenario-date-separator">.</span>
+      ${renderStaticPart(current.year, [current.year])}
     `
   }
 
@@ -305,8 +431,10 @@ function renderScenarioDate(currentDate, previousDate, version, widthReferenceDa
 
   return ['day', 'month', 'year']
     .map((key, index) => {
-      const separator = index < 2 ? '<span class="scenario-date-separator"> </span>' : ''
-      const sizeValues = [current[key], previous[key], widthReference?.[key]]
+      const separator = index < 2 ? '<span class="scenario-date-separator">.</span>' : ''
+      const sizeValues = key === 'month'
+        ? [current[key], previous[key], widthReference?.[key], '12']
+        : [current[key], previous[key]]
 
       if (current[key] === previous[key]) {
         return `${renderStaticPart(current[key], sizeValues)}${separator}`
@@ -323,8 +451,8 @@ function renderScenarioDate(currentDate, previousDate, version, widthReferenceDa
     .join('')
 }
 
-function estimateProjectedEndDate(remainingPages, spentStudyDays) {
-  return estimateCompletion(Math.max(remainingPages, 0), spentStudyDays).endDate
+function estimateProjectedEndDate(remainingPages, spentStudyDays, closedStudyDays = state.closedStudyDays) {
+  return estimateCompletion(Math.max(remainingPages, 0), spentStudyDays, closedStudyDays).endDate
 }
 
 function setForecastEndDate(date) {
@@ -334,6 +462,7 @@ function setForecastEndDate(date) {
 function getProjectedEndDate(
   remainingPages,
   spentStudyDays,
+  closedStudyDays = state.closedStudyDays,
   forecastDateKey = state.forecastEndDateKey,
   completionDateKey = state.completionDateKey,
 ) {
@@ -345,11 +474,41 @@ function getProjectedEndDate(
     return parseDateKey(forecastDateKey)
   }
 
-  return estimateProjectedEndDate(remainingPages, spentStudyDays)
+  return estimateProjectedEndDate(remainingPages, spentStudyDays, closedStudyDays)
 }
 
 function shouldReuseScenarioHam(filledCount = state.filledCount, preferredScenarioHam = state.preferredScenarioHam) {
   return filledCount < TOTAL_CELLS && preferredScenarioHam != null
+}
+
+function shouldReuseScenarioConfiguration() {
+  if (!shouldReuseScenarioHam()) {
+    return false
+  }
+
+  const preferredMode = state.preferredScenarioMode ?? 'weekly'
+
+  if (preferredMode === 'weekly') {
+    return true
+  }
+
+  return state.preferredScenarioLessonCount != null
+}
+
+function isScenarioStudyEligible(scenario, day) {
+  if (!day.isCurrentMonth || isScenarioPastStartDay(scenario, day)) {
+    return false
+  }
+
+  if (day.isSunday && !scenario.includeSundayStudy) {
+    return false
+  }
+
+  if (day.isHoliday && !scenario.includeHolidayStudy) {
+    return false
+  }
+
+  return true
 }
 
 function syncCompletionState(previousFilledCount, nextFilledCount, completionDate = null) {
@@ -370,6 +529,8 @@ function syncCompletionState(previousFilledCount, nextFilledCount, completionDat
     state.forecastEndDateKey = completionDateKey
     state.completionModalOpen = true
     state.preferredScenarioHam = null
+    state.preferredScenarioMode = null
+    state.preferredScenarioLessonCount = null
     return
   }
 
@@ -478,10 +639,12 @@ function isNonStudyDay(date, holidaySet) {
   return date.getDay() === 0 || holidaySet.has(toDateKey(date))
 }
 
-function estimateCompletion(remainingPages, spentStudyDays = 0) {
+function estimateCompletion(remainingPages, spentStudyDays = 0, closedStudyDays = 0) {
   const today = new Date()
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const totalStudyDaysNeeded = Math.max(remainingPages + spentStudyDays, 0)
+  const pastStudyDaysNeeded = Math.max(spentStudyDays, 0)
+  const futureStudyDaysNeeded = Math.max(remainingPages, 0)
+  const totalStudyDaysNeeded = pastStudyDaysNeeded + futureStudyDaysNeeded
 
   if (totalStudyDaysNeeded === 0) {
     return {
@@ -493,24 +656,40 @@ function estimateCompletion(remainingPages, spentStudyDays = 0) {
   }
 
   let cursor = start
-  let studyDaysLeft = totalStudyDaysNeeded
+  let pastStudyDaysLeft = pastStudyDaysNeeded
+  let futureStudyDaysLeft = futureStudyDaysNeeded
+  let remainingClosedStudyDays = Math.min(Math.max(closedStudyDays, 0), pastStudyDaysNeeded)
   let sundays = 0
   let holidays = 0
 
-  while (studyDaysLeft > 0) {
+  while (pastStudyDaysLeft > 0 || futureStudyDaysLeft > 0) {
     const holidaySet = getHolidaySet(cursor.getFullYear())
+    const closedDay = isNonStudyDay(cursor, holidaySet)
 
-    if (isNonStudyDay(cursor, holidaySet)) {
-      if (cursor.getDay() === 0) {
+    if (pastStudyDaysLeft > 0) {
+      if (!closedDay) {
+        pastStudyDaysLeft -= 1
+      } else if (remainingClosedStudyDays > 0) {
+        remainingClosedStudyDays -= 1
+        pastStudyDaysLeft -= 1
+      } else {
+        if (cursor.getDay() === 0) {
+          sundays += 1
+        } else {
+          holidays += 1
+        }
+      }
+    } else {
+      if (!closedDay) {
+        futureStudyDaysLeft -= 1
+      } else if (cursor.getDay() === 0) {
         sundays += 1
       } else {
         holidays += 1
       }
-    } else {
-      studyDaysLeft -= 1
     }
 
-    if (studyDaysLeft > 0) {
+    if (pastStudyDaysLeft > 0 || futureStudyDaysLeft > 0) {
       cursor = addDays(cursor, 1)
     }
   }
@@ -663,6 +842,24 @@ function getActiveScenarioWeekDays(scenario) {
   return scenario.visibleDays.filter((day) => day.weekIndex === scenario.activeWeekIndex)
 }
 
+function isScenarioOptionalStudyDay(scenario, day) {
+  return (day.isSunday && scenario.includeSundayStudy) || (day.isHoliday && scenario.includeHolidayStudy)
+}
+
+function getScenarioOrderedStudyDays(scenario) {
+  const remainingDays = getActiveScenarioWeekDays(scenario)
+    .filter((day) => isScenarioStudyEligible(scenario, day) && !scenario.windowResults[day.dateKey])
+
+  const regularDays = remainingDays.filter((day) => !isScenarioOptionalStudyDay(scenario, day))
+  const optionalDays = remainingDays.filter((day) => isScenarioOptionalStudyDay(scenario, day))
+
+  return {
+    regularDays,
+    optionalDays,
+    orderedDays: [...regularDays, ...optionalDays],
+  }
+}
+
 function isScenarioPastStartDay(scenario, day) {
   return day.isCurrentMonth
     && scenario.monthStartKey === scenario.startMonthStartKey
@@ -672,7 +869,7 @@ function isScenarioPastStartDay(scenario, day) {
 
 function getScenarioWeekStudyCount(scenario, weekIndex = scenario.activeWeekIndex) {
   return scenario.visibleDays.filter(
-    (day) => day.weekIndex === weekIndex && day.isCurrentMonth && !day.isHoliday && !isScenarioPastStartDay(scenario, day),
+    (day) => day.weekIndex === weekIndex && isScenarioStudyEligible(scenario, day),
   ).length
 }
 
@@ -680,9 +877,7 @@ function getScenarioWeekRemainingStudyCount(scenario, weekIndex = scenario.activ
   return scenario.visibleDays.filter(
     (day) => (
       day.weekIndex === weekIndex
-      && day.isCurrentMonth
-      && !day.isHoliday
-      && !isScenarioPastStartDay(scenario, day)
+      && isScenarioStudyEligible(scenario, day)
       && !scenario.windowResults[day.dateKey]
     ),
   ).length
@@ -697,26 +892,41 @@ function getScenarioWeekMaxChoice(scenario) {
 }
 
 function doesScenarioChoiceIncludeSunday(scenario, choice) {
+  return getScenarioChoiceHint(scenario, choice) === 'Pazar'
+}
+
+function getScenarioChoiceHint(scenario, choice) {
   if (choice <= 0) {
-    return false
+    return ''
   }
 
-  const sundayChoice = getActiveScenarioWeekDays(scenario)
-    .filter((day) => day.isCurrentMonth && !day.isHoliday && !isScenarioPastStartDay(scenario, day) && !scenario.windowResults[day.dateKey])
-    .reduce((match, day, index) => {
-      if (match !== null) {
-        return match
-      }
+  const selectedDay = getScenarioOrderedStudyDays(scenario).orderedDays[choice - 1]
 
-      return day.isSunday ? index + 1 : null
-    }, null)
+  if (!selectedDay) {
+    return ''
+  }
 
-  return sundayChoice !== null && choice === sundayChoice
+  if (selectedDay.isSunday) {
+    return 'Pazar'
+  }
+
+  if (selectedDay.isHoliday) {
+    return 'Tatil'
+  }
+
+  return ''
 }
 
 function createScenarioClosedEntry(day) {
+  if (day.isSunday) {
+    return {
+      type: 'sunday',
+      dateKey: day.dateKey,
+    }
+  }
+
   return {
-    type: day.isSunday ? 'sunday' : 'holiday',
+    type: 'holiday',
     dateKey: day.dateKey,
   }
 }
@@ -727,12 +937,17 @@ function advanceScenarioWeek(scenario) {
     return
   }
 
+  const previousMonthStartKey = scenario.monthStartKey
   const nextMonthView = getScenarioMonthView(addMonths(parseDateKey(scenario.monthStartKey), 1))
   scenario.monthStartKey = nextMonthView.monthStartKey
   scenario.weekCount = nextMonthView.weekCount
   scenario.activeWeekIndex = 0
   scenario.visibleDays = nextMonthView.visibleDays
   scenario.windowResults = {}
+
+  if (!scenario.viewMonthStartKey || scenario.viewMonthStartKey === previousMonthStartKey) {
+    scenario.viewMonthStartKey = nextMonthView.monthStartKey
+  }
 }
 
 function normalizeScenarioWeek(scenario) {
@@ -814,6 +1029,103 @@ function moveScenarioToNextStudyWeek(scenario) {
   normalizeScenarioWeek(scenario)
 }
 
+function getScenarioAnimationProfile(scenario) {
+  if (scenario?.mode === 'monthly' && scenario?.monthlyAutoRunning) {
+    const monthlyFullWeekCount = scenario.includeSundayStudy ? 7 : 6
+
+    if (scenario.selectedWeeklyLessonCount === monthlyFullWeekCount) {
+      return {
+        fillDelayStep: 12,
+        fillDuration: 170,
+        postFillHold: 70,
+        waveDelayStep: 10,
+        waveDuration: 150,
+        autoDelay: 110,
+      }
+    }
+
+    return {
+      fillDelayStep: 18,
+      fillDuration: 220,
+      postFillHold: 90,
+      waveDelayStep: 12,
+      waveDuration: 180,
+      autoDelay: 160,
+    }
+  }
+
+  return {
+    fillDelayStep: SCENARIO_FILL_DELAY_STEP,
+    fillDuration: SCENARIO_FILL_DURATION,
+    postFillHold: SCENARIO_POST_FILL_HOLD,
+    waveDelayStep: SCENARIO_WAVE_DELAY_STEP,
+    waveDuration: SCENARIO_WAVE_DURATION,
+    autoDelay: 0,
+  }
+}
+
+function openScenarioModal(step, boundary = false) {
+  if (!state.scenario) {
+    return
+  }
+
+  if (scenarioAutoTimer) {
+    window.clearTimeout(scenarioAutoTimer)
+    scenarioAutoTimer = null
+  }
+
+  state.scenario.modalOpen = true
+  state.scenario.modalBoundary = boundary
+  state.scenario.modalStep = step
+  state.scenario.modalHamSelection = null
+  state.scenario.modalLessonSelection = state.scenario.mode === 'monthly'
+    ? state.scenario.selectedWeeklyLessonCount
+    : null
+  state.scenario.monthlyAutoRunning = false
+  state.scenario.locked = false
+}
+
+function scheduleScenarioAutoRun() {
+  const scenario = state.scenario
+
+  if (
+    !scenario
+    || scenario.mode !== 'monthly'
+    || !scenario.monthlyAutoRunning
+    || scenario.selectedWeeklyLessonCount == null
+    || scenario.selectedWeeklyLessonCount <= 0
+    || scenario.modalOpen
+    || scenario.locked
+    || scenario.complete
+    || scenario.filling
+    || scenario.rolling
+    || scenario.incoming
+    || getScenarioWeekRemainingStudyCount(scenario) <= 0
+  ) {
+    return
+  }
+
+  if (scenarioAutoTimer) {
+    return
+  }
+
+  scenarioAutoTimer = window.setTimeout(() => {
+    scenarioAutoTimer = null
+
+    if (
+      !state.scenario
+      || state.scenario.mode !== 'monthly'
+      || !state.scenario.monthlyAutoRunning
+      || state.scenario.selectedWeeklyLessonCount == null
+      || state.scenario.selectedWeeklyLessonCount <= 0
+    ) {
+      return
+    }
+
+    applyScenarioChoice(state.scenario.selectedWeeklyLessonCount)
+  }, getScenarioAnimationProfile(scenario).autoDelay)
+}
+
 function finishScenarioMonthTransition() {
   if (!state.scenario) {
     return
@@ -822,6 +1134,10 @@ function finishScenarioMonthTransition() {
   state.scenario.incoming = false
   state.scenario.locked = false
   render()
+
+  if (state.scenario.mode === 'monthly') {
+    scheduleScenarioAutoRun()
+  }
 }
 
 function startScenarioMonthTransition() {
@@ -829,7 +1145,7 @@ function startScenarioMonthTransition() {
     return
   }
 
-  const monthWaveDuration = getScenarioWaveTotal(state.scenario.visibleDays.length)
+  const monthWaveDuration = getScenarioWaveTotal(state.scenario, state.scenario.visibleDays.length)
   state.scenario.locked = true
   state.scenario.rolling = true
   state.scenario.incoming = false
@@ -851,18 +1167,26 @@ function startScenarioMonthTransition() {
 
 function createScenarioState() {
   const remainingPages = Math.max(TOTAL_CELLS - state.filledCount, 0)
-  const initialHam = shouldReuseScenarioHam() ? state.preferredScenarioHam : 1
+  const isComplete = remainingPages === 0
+  const reusableConfig = shouldReuseScenarioConfiguration()
+  const initialHam = shouldReuseScenarioHam()
+    ? state.preferredScenarioHam
+    : (state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1)
   const today = startOfDay(new Date())
   const monthView = getScenarioMonthView(today)
   const activeWeekIndex = monthView.visibleDays.find((day) => day.dateKey === toDateKey(today))?.weekIndex ?? 0
   const startDateKey = toDateKey(today)
+  const initialMode = reusableConfig ? (state.preferredScenarioMode ?? 'weekly') : null
+  const initialLessonCount = reusableConfig && initialMode === 'monthly'
+    ? clampNumber(state.preferredScenarioLessonCount ?? 6, 0, 7)
+    : null
   const scenario = {
     initialRemaining: remainingPages,
     greensEarned: 0,
     redsAdded: 0,
     entries: [],
-    complete: remainingPages === 0,
-    currentEndDate: getProjectedEndDate(remainingPages, state.spentStudyDays),
+    complete: isComplete,
+    currentEndDate: getProjectedEndDate(remainingPages, state.spentStudyDays, state.closedStudyDays),
     completedEndDate: null,
     previousEndDate: null,
     dateWidthReference: null,
@@ -877,34 +1201,135 @@ function createScenarioState() {
     startMonthStartKey: monthView.monthStartKey,
     startWeekIndex: activeWeekIndex,
     monthStartKey: monthView.monthStartKey,
+    viewMonthStartKey: monthView.monthStartKey,
     weekCount: monthView.weekCount,
     activeWeekIndex,
     visibleDays: monthView.visibleDays,
     windowResults: {},
     animatedResultKeys: [],
-    modalOpen: !shouldReuseScenarioHam(),
-    modalContext: shouldReuseScenarioHam() ? null : 'initial',
+    modalOpen: !isComplete && !reusableConfig,
     boundaryReached: false,
     locked: false,
     filling: false,
     rolling: false,
     incoming: false,
+    mode: initialMode,
+    previousModeSelection: initialMode,
+    selectedWeeklyLessonCount: initialLessonCount,
+    monthlyAutoRunning: !isComplete && reusableConfig && initialMode === 'monthly',
+    monthlyWeekPlan: null,
+    modalStep: !isComplete && !reusableConfig ? 'mode' : null,
+    modalBoundary: false,
+    modalHamSelection: null,
+    modalLessonSelection: initialLessonCount,
+    includeSundayStudy: state.preferredScenarioSundayEnabled === true,
+    includeHolidayStudy: state.preferredScenarioHolidayEnabled === true,
   }
 
   normalizeScenarioWeek(scenario)
   return scenario
 }
 
-function getScenarioFillTotal(dayCount) {
-  return SCENARIO_FILL_DURATION + (SCENARIO_FILL_DELAY_STEP * Math.max(dayCount - 1, 0))
+function createCompletedScenarioViewState() {
+  const snapshot = state.completedScenarioView
+
+  if (!snapshot?.startDateKey || !snapshot?.startMonthStartKey || !snapshot?.finalMonthStartKey) {
+    return createScenarioState()
+  }
+
+  const finalMonthView = getScenarioMonthView(parseDateKey(snapshot.finalMonthStartKey))
+  const completedEndDate = snapshot.completedEndDateKey
+    ? parseDateKey(snapshot.completedEndDateKey)
+    : getProjectedEndDate(0, state.spentStudyDays, state.closedStudyDays)
+
+  return {
+    initialRemaining: 0,
+    greensEarned: 0,
+    redsAdded: 0,
+    entries: [],
+    archivedEntries: snapshot.entries,
+    complete: true,
+    currentEndDate: completedEndDate,
+    completedEndDate,
+    previousEndDate: null,
+    dateWidthReference: completedEndDate,
+    dateVersion: 0,
+    currentHam: state.preferredScenarioHam ?? 1,
+    virtualPace: state.pace,
+    virtualCount: state.filledCount,
+    virtualJuz: state.juz,
+    shouldBlackenNextLesson: false,
+    repeatGrayCount: 0,
+    startDateKey: snapshot.startDateKey,
+    startMonthStartKey: snapshot.startMonthStartKey,
+    startWeekIndex: 0,
+    monthStartKey: snapshot.finalMonthStartKey,
+    viewMonthStartKey: snapshot.finalMonthStartKey,
+    weekCount: finalMonthView.weekCount,
+    activeWeekIndex: 0,
+    visibleDays: finalMonthView.visibleDays,
+    windowResults: {},
+    animatedResultKeys: [],
+    modalOpen: false,
+    boundaryReached: false,
+    locked: false,
+    filling: false,
+    rolling: false,
+    incoming: false,
+    mode: snapshot.mode,
+    previousModeSelection: snapshot.mode,
+    selectedWeeklyLessonCount: snapshot.selectedWeeklyLessonCount,
+    monthlyAutoRunning: false,
+    monthlyWeekPlan: null,
+    modalStep: null,
+    modalBoundary: false,
+    modalHamSelection: null,
+    modalLessonSelection: snapshot.selectedWeeklyLessonCount,
+    includeSundayStudy: snapshot.includeSundayStudy,
+    includeHolidayStudy: snapshot.includeHolidayStudy,
+  }
 }
 
-function getScenarioRevealDuration(dayCount) {
-  return getScenarioFillTotal(dayCount) + SCENARIO_POST_FILL_HOLD
+function createCompletedScenarioSnapshot(scenario) {
+  const completedEndDate = scenario.completedEndDate
+    ?? scenario.currentEndDate
+    ?? (state.completionDateKey ? parseDateKey(state.completionDateKey) : null)
+
+  return {
+    entries: scenario.entries
+      .filter((entry) => entry.type !== 'repeat-summary' && entry.dateKey)
+      .map((entry) => ({
+        type: entry.type,
+        dateKey: entry.dateKey,
+        hamLevel: entry.hamLevel ?? 1,
+        gain: entry.gain ?? 0,
+        isSundayStudy: entry.isSundayStudy === true,
+        isHolidayStudy: entry.isHolidayStudy === true,
+        blackFill: entry.blackFill === true,
+      })),
+    startDateKey: scenario.startDateKey,
+    startMonthStartKey: scenario.startMonthStartKey,
+    finalMonthStartKey: scenario.monthStartKey,
+    completedEndDateKey: completedEndDate ? toDateKey(startOfDay(completedEndDate)) : null,
+    mode: scenario.mode ?? 'weekly',
+    selectedWeeklyLessonCount: scenario.selectedWeeklyLessonCount,
+    includeSundayStudy: scenario.includeSundayStudy === true,
+    includeHolidayStudy: scenario.includeHolidayStudy === true,
+  }
 }
 
-function getScenarioWaveTotal(dayCount) {
-  return SCENARIO_WAVE_DURATION + (SCENARIO_WAVE_DELAY_STEP * Math.max(dayCount - 1, 0))
+function getScenarioFillTotal(scenario, dayCount) {
+  const profile = getScenarioAnimationProfile(scenario)
+  return profile.fillDuration + (profile.fillDelayStep * Math.max(dayCount - 1, 0))
+}
+
+function getScenarioRevealDuration(scenario, dayCount) {
+  return getScenarioFillTotal(scenario, dayCount) + getScenarioAnimationProfile(scenario).postFillHold
+}
+
+function getScenarioWaveTotal(scenario, dayCount) {
+  const profile = getScenarioAnimationProfile(scenario)
+  return profile.waveDuration + (profile.waveDelayStep * Math.max(dayCount - 1, 0))
 }
 
 function shuffleArray(values) {
@@ -952,9 +1377,17 @@ function setScenarioDateTransition(nextDate) {
 
 function openScenarioView() {
   clearScenarioTimers()
-  state.scenario = createScenarioState()
+  if (!state.scenario) {
+    state.scenario = state.filledCount >= TOTAL_CELLS && state.completedScenarioView
+      ? createCompletedScenarioViewState()
+      : createScenarioState()
+  }
   state.view = 'scenario'
   render()
+
+  if (state.scenario?.mode === 'monthly' && !state.scenario.modalOpen) {
+    scheduleScenarioAutoRun()
+  }
 }
 
 function openMainView() {
@@ -976,14 +1409,7 @@ function applyScenarioChoice(selectedGreenCount) {
 
   const isRepeatMode = scenario.currentHam === 'repeat'
   const activeWeekDays = getActiveScenarioWeekDays(scenario)
-  const visibleStudyDays = activeWeekDays.filter(
-    (day) => day.isCurrentMonth
-      && !day.isHoliday
-      && !isScenarioPastStartDay(scenario, day)
-      && !scenario.windowResults[day.dateKey],
-  )
-  const weekdayStudyDays = visibleStudyDays.filter((day) => !day.isSunday)
-  const sundayStudyDays = visibleStudyDays.filter((day) => day.isSunday)
+  const { regularDays, optionalDays, orderedDays: visibleStudyDays } = getScenarioOrderedStudyDays(scenario)
   const boundarySelectableChoice = getMaxScenarioChoice(scenario.virtualJuz)
   const maxSelectableChoice = getScenarioWeekMaxChoice(scenario)
   const remainingChoicesToCompletion = getScenarioCompletionChoiceLimit(scenario)
@@ -992,17 +1418,15 @@ function applyScenarioChoice(selectedGreenCount) {
     || remainingChoicesToCompletion < visibleStudyDays.length
   const prioritizedStudyDays = [
     ...(boundaryLimitedWeek && actualGreens === maxSelectableChoice
-      ? weekdayStudyDays
-      : shuffleArray(weekdayStudyDays)),
-    ...sundayStudyDays,
+      ? regularDays
+      : shuffleArray(regularDays)),
+    ...optionalDays,
   ]
   const selectedSuccessDateKeys = new Set(
     prioritizedStudyDays.slice(0, actualGreens).map((day) => day.dateKey),
   )
   const beforeFilledCount = projectScenarioOutcome().filledCount
   const beforeVirtualJuz = scenario.virtualJuz
-  const displayedEndDateBeforeChoice = scenario.currentEndDate
-    ?? estimateProjectedEndDate(Math.max(TOTAL_CELLS - beforeFilledCount, 0), state.spentStudyDays)
   const animatedResultKeys = []
   let boundaryReachedDuringWeek = false
   let studyIndex = 0
@@ -1024,10 +1448,19 @@ function applyScenarioChoice(selectedGreenCount) {
       return
     }
 
-    if (day.isHoliday || (day.isSunday && !selectedSuccessDateKeys.has(day.dateKey))) {
+    const isClosedNonStudyDay = (
+      (day.isSunday && !scenario.includeSundayStudy)
+      || (day.isHoliday && !scenario.includeHolidayStudy)
+    )
+
+    if (isClosedNonStudyDay) {
       const closedEntry = createScenarioClosedEntry(day)
       scenario.entries.push(closedEntry)
       scenario.windowResults[day.dateKey] = closedEntry
+      return
+    }
+
+    if (isScenarioOptionalStudyDay(scenario, day) && !selectedSuccessDateKeys.has(day.dateKey)) {
       return
     }
 
@@ -1044,6 +1477,7 @@ function applyScenarioChoice(selectedGreenCount) {
       hamLevel: scenario.currentHam,
       gain,
       isSundayStudy: day.isSunday && entryType === 'success',
+      isHolidayStudy: day.isHoliday && entryType === 'success',
       blackFill: false,
     }
 
@@ -1091,10 +1525,15 @@ function applyScenarioChoice(selectedGreenCount) {
   }
 
   const afterProjection = projectScenarioOutcome()
+  const nextEndDate = estimateProjectedEndDate(
+    Math.max(TOTAL_CELLS - afterProjection.filledCount, 0),
+    afterProjection.spentStudyDays,
+    afterProjection.closedStudyDays,
+  )
   scenario.complete = afterProjection.filledCount >= TOTAL_CELLS
-  scenario.completedEndDate = scenario.complete ? displayedEndDateBeforeChoice : null
+  scenario.completedEndDate = scenario.complete ? nextEndDate : null
   if (scenario.complete) {
-    setForecastEndDate(displayedEndDateBeforeChoice)
+    setForecastEndDate(nextEndDate)
   }
   scenario.animatedResultKeys = animatedResultKeys
   scenario.locked = true
@@ -1102,15 +1541,9 @@ function applyScenarioChoice(selectedGreenCount) {
   scenario.boundaryReached = virtualBoundaryReached
   scenario.incoming = false
 
-  const revealDuration = getScenarioRevealDuration(activeWeekDays.length)
+  const revealDuration = getScenarioRevealDuration(scenario, activeWeekDays.length)
 
-  if (!scenario.complete) {
-    const nextEndDate = estimateProjectedEndDate(
-      Math.max(TOTAL_CELLS - afterProjection.filledCount, 0),
-      afterProjection.spentStudyDays,
-    )
-    setScenarioDateTransition(nextEndDate)
-  }
+  setScenarioDateTransition(nextEndDate)
   render()
 
   scenarioRevealTimer = window.setTimeout(() => {
@@ -1127,10 +1560,8 @@ function applyScenarioChoice(selectedGreenCount) {
 
     if (state.scenario.boundaryReached) {
       state.preferredScenarioHam = null
-      state.scenario.modalOpen = true
-      state.scenario.modalContext = 'boundary'
       state.scenario.boundaryReached = false
-      state.scenario.locked = false
+      openScenarioModal(state.scenario.mode === 'monthly' ? 'monthly-config' : 'weekly-ham', true)
       render()
       return
     }
@@ -1139,6 +1570,10 @@ function applyScenarioChoice(selectedGreenCount) {
       moveScenarioToNextStudyWeek(state.scenario)
       state.scenario.locked = false
       render()
+
+      if (state.scenario.mode === 'monthly') {
+        scheduleScenarioAutoRun()
+      }
       return
     }
 
@@ -1149,11 +1584,15 @@ function applyScenarioChoice(selectedGreenCount) {
 function commitScenarioToMain(nextView = 'main') {
   clearScenarioTimers()
   const previousFilledCount = state.filledCount
-  const previousDisplayEndDate = getProjectedEndDate(TOTAL_CELLS - previousFilledCount, state.spentStudyDays)
+  const previousDisplayEndDate = getProjectedEndDate(TOTAL_CELLS - previousFilledCount, state.spentStudyDays, state.closedStudyDays)
   const projected = projectScenarioOutcome()
   const displayEndDate = state.scenario?.completedEndDate
     ?? state.scenario?.currentEndDate
     ?? previousDisplayEndDate
+
+  if (state.scenario?.complete) {
+    state.completedScenarioView = createCompletedScenarioSnapshot(state.scenario)
+  }
 
   state.filledCount = projected.filledCount
   state.pace = projected.pace
@@ -1163,6 +1602,7 @@ function commitScenarioToMain(nextView = 'main') {
     .slice(-320)
   state.carryRedCount = projected.pendingRedCount
   state.spentStudyDays = projected.spentStudyDays
+  state.closedStudyDays = projected.closedStudyDays
   state.scenario = null
   state.view = nextView
   state.animate = false
@@ -1177,8 +1617,13 @@ function renderTabbedPanels(nextView) {
     return
   }
 
-  if (state.view === 'scenario' && nextView !== 'scenario') {
+  if (state.view === 'scenario' && nextView === 'main') {
     commitScenarioToMain(nextView)
+    return
+  }
+
+  if (state.view === 'scenario' && nextView === 'history') {
+    openHistoryView()
     return
   }
 
@@ -1207,12 +1652,14 @@ function projectScenarioOutcome() {
       juz: state.juz,
       pendingRedCount: state.carryRedCount,
       spentStudyDays: state.spentStudyDays,
+      closedStudyDays: state.closedStudyDays,
     }
   }
 
   let nextFilledCount = state.filledCount
   let pendingRedCount = state.carryRedCount
   let spentStudyDays = state.spentStudyDays
+  let closedStudyDays = state.closedStudyDays
   const nextMarks = [...state.committedMarks]
   scenario.entries.forEach((entry) => {
     if (entry.type === 'repeat-summary') {
@@ -1230,6 +1677,10 @@ function projectScenarioOutcome() {
     }
 
     spentStudyDays += 1
+
+    if (entry.isSundayStudy || entry.isHolidayStudy) {
+      closedStudyDays += 1
+    }
 
     if (entry.hamLevel === 'repeat') {
       return
@@ -1264,6 +1715,7 @@ function projectScenarioOutcome() {
     juz: scenario.virtualJuz,
     pendingRedCount,
     spentStudyDays,
+    closedStudyDays,
   }
 }
 
@@ -1287,6 +1739,170 @@ function clearScenarioTimers() {
     window.clearTimeout(scenarioIncomingTimer)
     scenarioIncomingTimer = null
   }
+
+  if (scenarioAutoTimer) {
+    window.clearTimeout(scenarioAutoTimer)
+    scenarioAutoTimer = null
+  }
+}
+
+function finalizeScenarioModalSelection() {
+  if (!state.scenario) {
+    return
+  }
+
+  const scenario = state.scenario
+  const selectedMode = scenario.mode ?? 'weekly'
+  const monthlyHamLocked = !scenario.modalBoundary && selectedMode === 'monthly' && scenario.virtualJuz > 0
+  const hamLevel = monthlyHamLocked ? scenario.currentHam : scenario.modalHamSelection
+
+  if (hamLevel == null) {
+    return
+  }
+
+  const isBoundary = scenario.modalBoundary
+  const maxBoundaryHam = getScenarioBoundarySelectableHamLimit(scenario)
+
+  if (isBoundary && hamLevel !== 'repeat' && hamLevel > maxBoundaryHam) {
+    return
+  }
+
+  if (selectedMode === 'monthly' && scenario.modalLessonSelection == null) {
+    return
+  }
+
+  const wasRepeatMode = scenario.currentHam === 'repeat'
+  scenario.currentHam = hamLevel
+  scenario.previousModeSelection = selectedMode
+  scenario.selectedWeeklyLessonCount = selectedMode === 'monthly' ? scenario.modalLessonSelection : null
+  scenario.monthlyAutoRunning = selectedMode === 'monthly'
+  scenario.monthlyWeekPlan = selectedMode === 'monthly'
+    ? { lessonCount: scenario.modalLessonSelection }
+    : null
+  if (isBoundary && hamLevel !== 'repeat') {
+    scenario.virtualPace += hamLevel
+  }
+  if (isBoundary && wasRepeatMode && hamLevel !== 'repeat') {
+    scenario.shouldBlackenNextLesson = true
+  }
+  scenario.modalOpen = false
+  scenario.modalBoundary = false
+  scenario.modalStep = null
+  scenario.modalHamSelection = null
+  scenario.modalLessonSelection = null
+  scenario.locked = true
+  state.preferredScenarioHam = hamLevel
+  state.preferredScenarioMode = selectedMode
+  state.preferredScenarioLessonCount = selectedMode === 'monthly' ? scenario.selectedWeeklyLessonCount : null
+
+  if (!isBoundary) {
+    scenario.locked = false
+    render()
+
+    if (scenario.mode === 'monthly') {
+      scheduleScenarioAutoRun()
+    }
+    return
+  }
+
+  scenario.virtualJuz = 0
+
+  if (getScenarioWeekRemainingStudyCount(scenario) > 0) {
+    scenario.locked = false
+    render()
+
+    if (scenario.mode === 'monthly') {
+      scheduleScenarioAutoRun()
+    }
+    return
+  }
+
+  if (hasRemainingStudyWeekInWindow(scenario)) {
+    moveScenarioToNextStudyWeek(scenario)
+    scenario.locked = false
+    render()
+
+    if (scenario.mode === 'monthly') {
+      scheduleScenarioAutoRun()
+    }
+    return
+  }
+
+  startScenarioMonthTransition()
+}
+
+function selectScenarioMode(nextMode) {
+  if (!state.scenario) {
+    return
+  }
+
+  state.scenario.mode = nextMode
+  state.scenario.previousModeSelection = nextMode
+  state.scenario.modalStep = nextMode === 'monthly' ? 'monthly-config' : 'weekly-ham'
+  state.scenario.modalHamSelection = nextMode === 'monthly' && !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
+    ? state.scenario.currentHam
+    : null
+  state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
+  render()
+}
+
+function navigateScenarioMonth(offset) {
+  if (!state.scenario || state.scenario.locked) {
+    return
+  }
+
+  const scenario = state.scenario
+  const currentViewDate = parseDateKey(scenario.viewMonthStartKey ?? scenario.monthStartKey)
+  const nextView = startOfMonth(addMonths(currentViewDate, offset))
+  const minViewDate = parseDateKey(scenario.startMonthStartKey)
+  const maxViewDate = parseDateKey(scenario.monthStartKey)
+
+  if (nextView < minViewDate || nextView > maxViewDate) {
+    return
+  }
+
+  scenario.viewMonthStartKey = toDateKey(nextView)
+  render()
+}
+
+function selectScenarioLessonCount(nextCount) {
+  if (!state.scenario) {
+    return
+  }
+
+  state.scenario.modalLessonSelection = nextCount
+  render()
+}
+
+function toggleScenarioAvailability(kind) {
+  if (!state.scenario) {
+    return
+  }
+
+  if (kind === 'sunday') {
+    state.scenario.includeSundayStudy = !state.scenario.includeSundayStudy
+    state.preferredScenarioSundayEnabled = state.scenario.includeSundayStudy
+
+    if (!state.scenario.includeSundayStudy) {
+      if (state.scenario.selectedWeeklyLessonCount != null) {
+        state.scenario.selectedWeeklyLessonCount = Math.min(state.scenario.selectedWeeklyLessonCount, 6)
+      }
+      if (state.scenario.modalLessonSelection != null) {
+        state.scenario.modalLessonSelection = Math.min(state.scenario.modalLessonSelection, 6)
+      }
+      if (state.preferredScenarioLessonCount != null) {
+        state.preferredScenarioLessonCount = Math.min(state.preferredScenarioLessonCount, 6)
+      }
+    }
+  }
+
+  if (kind === 'holiday') {
+    state.scenario.includeHolidayStudy = !state.scenario.includeHolidayStudy
+    state.preferredScenarioHolidayEnabled = state.scenario.includeHolidayStudy
+  }
+
+  persistState()
+  render()
 }
 
 function applyHamSelection(nextHamLevel) {
@@ -1294,49 +1910,16 @@ function applyHamSelection(nextHamLevel) {
     return
   }
 
-  const hamLevel = nextHamLevel === 'repeat' ? 'repeat' : nextHamLevel
-  const modalContext = state.scenario.modalContext
-  const maxBoundaryHam = getScenarioBoundarySelectableHamLimit(state.scenario)
+  state.scenario.modalHamSelection = nextHamLevel === 'repeat' ? 'repeat' : nextHamLevel
+  render()
+}
 
-  if (modalContext === 'boundary' && hamLevel !== 'repeat' && hamLevel > maxBoundaryHam) {
+function startScenarioFromModal() {
+  if (!state.scenario) {
     return
   }
 
-  const wasRepeatMode = state.scenario.currentHam === 'repeat'
-  state.scenario.currentHam = hamLevel
-  if (modalContext === 'boundary' && hamLevel !== 'repeat') {
-    state.scenario.virtualPace += hamLevel
-  }
-  if (modalContext === 'boundary' && wasRepeatMode && hamLevel !== 'repeat') {
-    state.scenario.shouldBlackenNextLesson = true
-  }
-  state.scenario.modalOpen = false
-  state.scenario.modalContext = null
-  state.scenario.locked = true
-  state.preferredScenarioHam = hamLevel
-
-  if (modalContext === 'initial') {
-    state.scenario.locked = false
-    render()
-    return
-  }
-
-  state.scenario.virtualJuz = 0
-
-  if (getScenarioWeekRemainingStudyCount(state.scenario) > 0) {
-    state.scenario.locked = false
-    render()
-    return
-  }
-
-  if (hasRemainingStudyWeekInWindow(state.scenario)) {
-    moveScenarioToNextStudyWeek(state.scenario)
-    state.scenario.locked = false
-    render()
-    return
-  }
-
-  startScenarioMonthTransition()
+  finalizeScenarioModalSelection()
 }
 
 export function render() {
@@ -1367,9 +1950,16 @@ export function persistState() {
       committedMarks: state.committedMarks,
       carryRedCount: state.carryRedCount,
       spentStudyDays: state.spentStudyDays,
+      closedStudyDays: state.closedStudyDays,
       forecastEndDateKey: state.forecastEndDateKey,
       completionDateKey: state.completionDateKey,
       preferredScenarioHam: state.preferredScenarioHam,
+      preferredScenarioMode: state.preferredScenarioMode,
+      preferredScenarioLessonCount: state.preferredScenarioLessonCount,
+      preferredScenarioSundayEnabled: state.preferredScenarioSundayEnabled,
+      preferredScenarioHolidayEnabled: state.preferredScenarioHolidayEnabled,
+      completedScenarioView: state.completedScenarioView,
+      history: state.history,
     }),
   )
 }
@@ -1393,30 +1983,50 @@ export {
   estimateProjectedEndDate,
   estimateCompletion,
   formatDate,
+  formatDateInputText,
   formatMonthYear,
+  getHolidaySet,
+  getTodayDateKey,
   getCellState,
   getFillSequenceIndex,
   getHamSelectionLabel,
   getHamSelectionNumericValue,
+  getHistoryCurrentHamValue,
   getMarkMap,
+  getScenarioMonthView,
   getProjectedEndDate,
   getScenarioVisual,
   getScenarioWeekMaxChoice,
   getScenarioBoundaryHamLimit,
   getScenarioBoundarySelectableHamLimit,
+  getScenarioChoiceHint,
   doesScenarioChoiceIncludeSunday,
   isScenarioPastStartDay,
+  isNonStudyDay,
   openMainView,
   openHistoryView,
   openScenarioView,
+  endOfMonth,
+  endOfWeekSunday,
+  addDays,
+  padNumber,
   parseDateKey,
+  parseDateInputText,
   projectScenarioOutcome,
   renderTabbedPanels,
   renderCompletionModal,
   renderScenarioDate,
+  navigateScenarioMonth,
+  selectScenarioLessonCount,
+  selectScenarioMode,
+  startScenarioFromModal,
+  startOfMonth,
+  startOfWeekMonday,
   shiftHamSelection,
   setForecastEndDate,
   syncCompletionState,
+  toggleScenarioAvailability,
+  toDateKey,
   triggerApplyButtonValidationError,
 }
 
