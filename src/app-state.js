@@ -1,8 +1,3 @@
-import './style.css'
-import { renderMainView } from './main-table.js'
-import { renderScenarioView } from './scenario-view.js'
-import { renderHistoryView } from './history-view.js'
-
 const ROWS = 20
 const COLUMNS = 30
 const TOTAL_CELLS = ROWS * COLUMNS
@@ -192,7 +187,7 @@ const state = {
   },
 }
 
-const app = document.querySelector('#app')
+const listeners = new Set()
 let scenarioDateTimer = null
 let scenarioRevealTimer = null
 let scenarioRollTimer = null
@@ -242,7 +237,7 @@ function formatDateInputText(dateKey) {
 
 function parseDateInputText(text) {
   const normalized = String(text ?? '').replace(/[^\d/]/g, '').trim()
-  const match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
 
   if (!match) {
     return null
@@ -1168,18 +1163,13 @@ function startScenarioMonthTransition() {
 function createScenarioState() {
   const remainingPages = Math.max(TOTAL_CELLS - state.filledCount, 0)
   const isComplete = remainingPages === 0
-  const reusableConfig = shouldReuseScenarioConfiguration()
-  const initialHam = shouldReuseScenarioHam()
-    ? state.preferredScenarioHam
-    : (state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1)
+  const initialHam = state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1
   const today = startOfDay(new Date())
   const monthView = getScenarioMonthView(today)
   const activeWeekIndex = monthView.visibleDays.find((day) => day.dateKey === toDateKey(today))?.weekIndex ?? 0
   const startDateKey = toDateKey(today)
-  const initialMode = reusableConfig ? (state.preferredScenarioMode ?? 'weekly') : null
-  const initialLessonCount = reusableConfig && initialMode === 'monthly'
-    ? clampNumber(state.preferredScenarioLessonCount ?? 6, 0, 7)
-    : null
+  const initialMode = null
+  const initialLessonCount = null
   const scenario = {
     initialRemaining: remainingPages,
     greensEarned: 0,
@@ -1207,7 +1197,8 @@ function createScenarioState() {
     visibleDays: monthView.visibleDays,
     windowResults: {},
     animatedResultKeys: [],
-    modalOpen: !isComplete && !reusableConfig,
+    modalOpen: !isComplete,
+    modalDismissed: false,
     boundaryReached: false,
     locked: false,
     filling: false,
@@ -1216,11 +1207,11 @@ function createScenarioState() {
     mode: initialMode,
     previousModeSelection: initialMode,
     selectedWeeklyLessonCount: initialLessonCount,
-    monthlyAutoRunning: !isComplete && reusableConfig && initialMode === 'monthly',
+    monthlyAutoRunning: false,
     monthlyWeekPlan: null,
-    modalStep: !isComplete && !reusableConfig ? 'mode' : null,
+    modalStep: !isComplete ? 'mode' : null,
     modalBoundary: false,
-    modalHamSelection: null,
+    modalHamSelection: initialHam,
     modalLessonSelection: initialLessonCount,
     includeSundayStudy: state.preferredScenarioSundayEnabled === true,
     includeHolidayStudy: state.preferredScenarioHolidayEnabled === true,
@@ -1618,7 +1609,7 @@ function renderTabbedPanels(nextView) {
   }
 
   if (state.view === 'scenario' && nextView === 'main') {
-    commitScenarioToMain(nextView)
+    openMainView()
     return
   }
 
@@ -1753,8 +1744,8 @@ function finalizeScenarioModalSelection() {
 
   const scenario = state.scenario
   const selectedMode = scenario.mode ?? 'weekly'
-  const monthlyHamLocked = !scenario.modalBoundary && selectedMode === 'monthly' && scenario.virtualJuz > 0
-  const hamLevel = monthlyHamLocked ? scenario.currentHam : scenario.modalHamSelection
+  const hamLocked = !scenario.modalBoundary && scenario.virtualJuz > 0
+  const hamLevel = hamLocked ? scenario.currentHam : scenario.modalHamSelection
 
   if (hamLevel == null) {
     return
@@ -1839,7 +1830,8 @@ function selectScenarioMode(nextMode) {
   state.scenario.mode = nextMode
   state.scenario.previousModeSelection = nextMode
   state.scenario.modalStep = nextMode === 'monthly' ? 'monthly-config' : 'weekly-ham'
-  state.scenario.modalHamSelection = nextMode === 'monthly' && !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
+  const hamLocked = !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
+  state.scenario.modalHamSelection = hamLocked
     ? state.scenario.currentHam
     : null
   state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
@@ -1922,18 +1914,26 @@ function startScenarioFromModal() {
   finalizeScenarioModalSelection()
 }
 
+function dismissScenarioModal() {
+  if (!state.scenario) {
+    return
+  }
+  state.scenario.modalOpen = false
+  state.scenario.modalDismissed = true
+  render()
+}
+
+function reopenScenarioModal() {
+  if (!state.scenario || !state.scenario.modalDismissed) {
+    return
+  }
+  state.scenario.modalDismissed = false
+  state.scenario.modalOpen = true
+  render()
+}
+
 export function render() {
-  if (state.view === 'scenario') {
-    renderScenarioView()
-    return
-  }
-
-  if (state.view === 'history') {
-    renderHistoryView()
-    return
-  }
-
-  renderMainView()
+  listeners.forEach((listener) => listener())
 }
 
 export function persistState() {
@@ -1970,7 +1970,6 @@ export {
   TOTAL_CELLS,
   HAM_OPTIONS,
   WEEKDAY_LABELS,
-  app,
   state,
   applyHamSelection,
   applyScenarioChoice,
@@ -2006,6 +2005,7 @@ export {
   openMainView,
   openHistoryView,
   openScenarioView,
+  dismissScenarioModal,
   endOfMonth,
   endOfWeekSunday,
   addDays,
@@ -2016,6 +2016,7 @@ export {
   renderTabbedPanels,
   renderCompletionModal,
   renderScenarioDate,
+  reopenScenarioModal,
   navigateScenarioMonth,
   selectScenarioLessonCount,
   selectScenarioMode,
@@ -2030,9 +2031,14 @@ export {
   triggerApplyButtonValidationError,
 }
 
+export function subscribe(listener) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
 if (savedState.filledCount == null) {
   state.filledCount = calculateFilledCount(state.pace, state.juz, state.inputHamCount)
   state.baselineCount = state.filledCount
 }
-
-render()
