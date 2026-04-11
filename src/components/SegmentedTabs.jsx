@@ -11,7 +11,7 @@ export function SegmentedTabs({ activeView }) {
 
   return (
     <div className={`folder-tabs folder-tabs-${activeView}`} aria-label="Sayfa sekmeleri">
-      <span className="folder-tab-liquid" aria-hidden="true"></span>
+      <span className="folder-tab-slider" aria-hidden="true"></span>
       <button
         className={`folder-tab ${activeView === 'main' ? 'folder-tab-active' : ''}`}
         data-view-tab="main"

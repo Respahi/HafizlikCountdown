@@ -21,7 +21,6 @@ import {
   syncCompletionState,
   state as appState,
 } from './app-state.js'
-import { SegmentedTabs } from './components/SegmentedTabs.jsx'
 
 function shouldShowEmptyMainInputs(state) {
   return (
@@ -219,7 +218,9 @@ export function MainView({ state }) {
     <main className="layout">
       <section className="board-panel">
         <div className="view-topbar">
-          <SegmentedTabs activeView="main" />
+          <div className="board-topline">
+            <span className="board-topline-label">Hafızlık Ne Zaman Bitecek?</span>
+          </div>
           <div className="board-note board-note-topbar">
             <span className="board-note-label">Tahmini bitiş tarihi</span>
             <strong className="board-note-date">{formatDate(displayEndDate)}</strong>

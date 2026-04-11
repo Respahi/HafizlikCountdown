@@ -4,6 +4,7 @@ import { MainView } from './main-table.jsx'
 import { ScenarioView } from './scenario-view.jsx'
 import { HistoryView } from './history-view.jsx'
 import { CompletionModal } from './components/CompletionModal.jsx'
+import { SegmentedTabs } from './components/SegmentedTabs.jsx'
 
 function useAppStore() {
   const [, forceRender] = useReducer((value) => value + 1, 0)
@@ -18,6 +19,9 @@ export default function App() {
 
   return (
     <>
+      <div className="app-topbar">
+        <SegmentedTabs activeView={appState.view} />
+      </div>
       {appState.view === 'scenario' ? <ScenarioView state={appState} /> : null}
       {appState.view === 'history' ? <HistoryView state={appState} /> : null}
       {appState.view === 'main' ? <MainView state={appState} /> : null}

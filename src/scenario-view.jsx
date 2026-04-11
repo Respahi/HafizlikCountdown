@@ -26,10 +26,7 @@ import {
   selectScenarioMode,
   startScenarioFromModal,
   toggleScenarioAvailability,
-  dismissScenarioModal,
-  reopenScenarioModal,
 } from './app-state.js'
-import { SegmentedTabs } from './components/SegmentedTabs.jsx'
 
 function getScenarioChoiceBackground(choice, maxSelectableChoice) {
   const safeMaxChoice = Math.max(maxSelectableChoice, 1)
@@ -70,26 +67,169 @@ export function ScenarioView({ state }) {
   const hamLocked = !scenario.modalBoundary && scenario.virtualJuz > 0
   const weeklyChoiceButtonMax = scenario.includeSundayStudy ? 7 : 6
   const monthlyLessonOptionMax = scenario.includeSundayStudy ? 7 : 6
-  const shouldShowMonthlyLessonOptions = scenario.mode === 'monthly' && (hamLocked || scenario.modalHamSelection != null)
+  const selectedHamValue = hamLocked ? scenario.currentHam : (scenario.modalHamSelection ?? scenario.currentHam)
+  const selectedLessonCount = scenario.modalLessonSelection ?? scenario.selectedWeeklyLessonCount
+  const shouldShowMonthlyLessonOptions = scenario.mode === 'monthly' && selectedHamValue != null
   const canStartScenario = scenario.mode === 'weekly'
-    ? (hamLocked || scenario.modalHamSelection != null)
-    : (scenario.modalLessonSelection != null && (hamLocked || scenario.modalHamSelection != null))
+    ? selectedHamValue != null
+    : (selectedLessonCount != null && selectedHamValue != null)
+  const startButtonDisabled = (
+    !canStartScenario
+    || scenario.filling
+    || scenario.rolling
+    || scenario.incoming
+    || scenario.monthlyAutoRunning
+    || scenario.locked
+  )
+  const shouldShowSetupPanel = true
+
+  const setupPanel = (
+    <aside className="scenario-setup-column">
+      <div className="control-card scenario-setup-card">
+        <div className="scenario-setup-section">
+          <p className="eyebrow">{scenario.modalBoundary ? 'Yeni Aşama' : 'Başlangıç'}</p>
+          <h2>Hangi Mod?</h2>
+          <div className="scenario-mode-actions">
+            <button
+              className={`scenario-option scenario-mode-option ${scenario.mode === 'weekly' ? 'scenario-mode-option-active' : ''}`}
+              data-scenario-mode="weekly"
+              type="button"
+              onClick={() => selectScenarioMode('weekly')}
+            >
+              Haftalık
+            </button>
+            <button
+              className={`scenario-option scenario-mode-option ${scenario.mode === 'monthly' ? 'scenario-mode-option-active' : ''}`}
+              data-scenario-mode="monthly"
+              type="button"
+              onClick={() => selectScenarioMode('monthly')}
+            >
+              Aylık
+            </button>
+          </div>
+          <div className="scenario-availability-actions">
+            <button
+              className={`scenario-availability-option ${scenario.includeSundayStudy ? 'scenario-availability-option-active' : ''}`}
+              data-availability-kind="sunday"
+              type="button"
+              onClick={() => toggleScenarioAvailability('sunday')}
+            >
+              <span className="scenario-availability-check">{scenario.includeSundayStudy ? '✓' : ''}</span>
+              <span className="scenario-availability-label">Pazarlar</span>
+            </button>
+            <button
+              className={`scenario-availability-option ${scenario.includeHolidayStudy ? 'scenario-availability-option-active' : ''}`}
+              data-availability-kind="holiday"
+              type="button"
+              onClick={() => toggleScenarioAvailability('holiday')}
+            >
+              <span className="scenario-availability-check">{scenario.includeHolidayStudy ? '✓' : ''}</span>
+              <span className="scenario-availability-label">Tatil-Bayramlar</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="scenario-setup-section scenario-setup-detail">
+          {scenario.mode === 'weekly' ? (
+            <>
+              <p className="eyebrow">Haftalık Mod</p>
+              <h2>{scenario.modalBoundary ? 'Kaç Ham Alacaksın?' : 'Kaç Ham?'}</h2>
+              <div className="scenario-modal-ham-group">
+                <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': availableHamOptions.length }}>
+                  {availableHamOptions.map((option) => (
+                    <button
+                      key={option}
+                      className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${selectedHamValue === option ? 'scenario-modal-option-active' : ''}`}
+                      data-modal-ham={option}
+                      type="button"
+                      disabled={hamLocked}
+                      onClick={() => applyHamSelection(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className={`scenario-option scenario-modal-option scenario-modal-option-repeat ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
+                  data-modal-ham="repeat"
+                  type="button"
+                  disabled={hamLocked}
+                    onClick={() => applyHamSelection('repeat')}
+                  >
+                    Tekrar
+                  </button>
+                </div>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">Aylık Mod</p>
+              <div className="scenario-detail-section">
+                <h2>{scenario.modalBoundary ? 'Kaç Ham Alacaksın?' : 'Kaç Ham?'}</h2>
+                <div className="scenario-modal-ham-group">
+                  <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': availableHamOptions.length }}>
+                    {availableHamOptions.map((option) => (
+                      <button
+                        key={option}
+                        className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${selectedHamValue === option ? 'scenario-modal-option-active' : ''}`}
+                        data-modal-ham={option}
+                        type="button"
+                        disabled={hamLocked}
+                        onClick={() => applyHamSelection(option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className={`scenario-option scenario-modal-option scenario-modal-option-repeat ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
+                    data-modal-ham="repeat"
+                    type="button"
+                    disabled={hamLocked}
+                    onClick={() => applyHamSelection('repeat')}
+                  >
+                    Tekrar
+                  </button>
+                </div>
+              </div>
+              {shouldShowMonthlyLessonOptions ? (
+                <div className="scenario-detail-section">
+                  <h2>Haftalık Kaç Ders?</h2>
+                  <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': monthlyLessonOptionMax + 1 }}>
+                    {Array.from({ length: monthlyLessonOptionMax + 1 }, (_, index) => (
+                      <button
+                        key={index}
+                        className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${selectedLessonCount === index ? 'scenario-modal-option-active' : ''}`}
+                        data-modal-lesson={index}
+                        type="button"
+                        onClick={() => selectScenarioLessonCount(index)}
+                      >
+                        {index}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+          <button
+            className="scenario-button scenario-modal-start-button"
+            type="button"
+            disabled={startButtonDisabled}
+            onClick={startScenarioFromModal}
+          >
+            {scenario.modalOpen ? 'Senaryoya Başla' : 'Ayarları Uygula'}
+          </button>
+        </div>
+      </div>
+    </aside>
+  )
 
   return (
     <div className="view-container">
-      <main
-        className={`scenario-layout ${scenario.modalDismissed ? 'scenario-table-clickable' : ''}`}
-        onClick={() => {
-          if (scenario.modalDismissed) {
-            reopenScenarioModal();
-          }
-        }}
-      >
-        <section className="scenario-main">
-          <div className="view-topbar">
-            <SegmentedTabs activeView="scenario" />
-          </div>
+      <main className={`scenario-layout ${shouldShowSetupPanel ? 'scenario-layout-with-setup' : ''}`}>
+        {setupPanel}
 
+        <section className="scenario-main">
           <div className="scenario-strip-shell">
             <div className="scenario-month-bar">
               <button
@@ -191,31 +331,31 @@ export function ScenarioView({ state }) {
                 </div>
               </div>
             </div>
+
+            <div className="scenario-actions">
+              {Array.from({ length: weeklyChoiceButtonMax + 1 }, (_, index) => {
+                const value = index
+                const choiceHint = getScenarioChoiceHint(scenario, value)
+                const includesSunday = choiceHint === 'Pazar'
+
+                return (
+                  <button
+                    key={value}
+                    className={`scenario-option scenario-choice-option ${includesSunday ? 'scenario-choice-option-sunday' : ''}`}
+                    data-choice={value}
+                    type="button"
+                    style={{ '--scenario-choice-bg': getScenarioChoiceBackground(value, maxSelectableChoice) }}
+                    disabled={manualChoiceDisabled || value > maxSelectableChoice}
+                    onClick={() => applyScenarioChoice(value)}
+                  >
+                    {choiceHint ? <span className="scenario-option-hint">{choiceHint}</span> : null}
+                    <span className="scenario-option-value">{value}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-
-        <div className="scenario-actions">
-          {Array.from({ length: weeklyChoiceButtonMax + 1 }, (_, index) => {
-            const value = index
-              const choiceHint = getScenarioChoiceHint(scenario, value)
-              const includesSunday = choiceHint === 'Pazar'
-
-              return (
-                <button
-                  key={value}
-                  className={`scenario-option scenario-choice-option ${includesSunday ? 'scenario-choice-option-sunday' : ''}`}
-                  data-choice={value}
-                  type="button"
-                  style={{ '--scenario-choice-bg': getScenarioChoiceBackground(value, maxSelectableChoice) }}
-                  disabled={manualChoiceDisabled || value > maxSelectableChoice}
-                  onClick={() => applyScenarioChoice(value)}
-                >
-                  {choiceHint ? <span className="scenario-option-hint">{choiceHint}</span> : null}
-                  <span className="scenario-option-value">{value}</span>
-                </button>
-            )
-          })}
-        </div>
-      </section>
+        </section>
 
         <aside className="scenario-side">
           <div className="control-card scenario-fraction-card">
@@ -273,160 +413,6 @@ export function ScenarioView({ state }) {
           </div>
         </aside>
       </main>
-
-      {scenario.modalOpen ? (
-        <div
-          className="scenario-modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) dismissScenarioModal();
-          }}
-        >
-          <div className="scenario-modal-stack">
-            <div className={`scenario-modal scenario-mode-modal ${scenario.modalStep !== 'mode' ? 'scenario-mode-modal-raised' : ''}`}>
-              <p className="eyebrow">{scenario.modalBoundary ? 'Yeni Aşama' : 'Başlangıç'}</p>
-              <h2>Hangi Mod?</h2>
-              <div className="scenario-mode-actions">
-                <button
-                  className={`scenario-option scenario-mode-option ${scenario.mode === 'weekly' ? 'scenario-mode-option-active' : ''}`}
-                  data-scenario-mode="weekly"
-                  type="button"
-                  onClick={() => selectScenarioMode('weekly')}
-                >
-                  Haftalık
-                </button>
-                <button
-                  className={`scenario-option scenario-mode-option ${scenario.mode === 'monthly' ? 'scenario-mode-option-active' : ''}`}
-                  data-scenario-mode="monthly"
-                  type="button"
-                  onClick={() => selectScenarioMode('monthly')}
-                >
-                  Aylık
-                </button>
-              </div>
-              <div className="scenario-availability-actions">
-                <button
-                  className={`scenario-availability-option ${scenario.includeSundayStudy ? 'scenario-availability-option-active' : ''}`}
-                  data-availability-kind="sunday"
-                  type="button"
-                  onClick={() => toggleScenarioAvailability('sunday')}
-                >
-                  <span className="scenario-availability-check">{scenario.includeSundayStudy ? '✓' : ''}</span>
-                  <span className="scenario-availability-label">Pazarlar</span>
-                </button>
-                <button
-                  className={`scenario-availability-option ${scenario.includeHolidayStudy ? 'scenario-availability-option-active' : ''}`}
-                  data-availability-kind="holiday"
-                  type="button"
-                  onClick={() => toggleScenarioAvailability('holiday')}
-                >
-                  <span className="scenario-availability-check">{scenario.includeHolidayStudy ? '✓' : ''}</span>
-                  <span className="scenario-availability-label">Tatil-Bayramlar</span>
-                </button>
-              </div>
-            </div>
-
-            {scenario.modalStep !== 'mode' ? (
-              <div className="scenario-modal scenario-detail-modal">
-                {scenario.mode === 'weekly' ? (
-                  <>
-                    <p className="eyebrow">Haftalık Mod</p>
-                    <h2>{scenario.modalBoundary ? 'Kaç Ham Alacaksın?' : 'Kaç Ham?'}</h2>
-                    <div className="scenario-modal-ham-group">
-                      <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': availableHamOptions.length }}>
-                        {availableHamOptions.map((option) => (
-                          <button
-                            key={option}
-                            className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${scenario.modalHamSelection === option ? 'scenario-modal-option-active' : ''}`}
-                            data-modal-ham={option}
-                            type="button"
-                            disabled={hamLocked}
-                            onClick={() => applyHamSelection(option)}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        className={`scenario-option scenario-modal-option scenario-modal-option-repeat ${scenario.modalHamSelection === 'repeat' ? 'scenario-modal-option-active' : ''}`}
-                        data-modal-ham="repeat"
-                        type="button"
-                        disabled={hamLocked}
-                        onClick={() => applyHamSelection('repeat')}
-                      >
-                        Tekrar
-                      </button>
-                    </div>
-                    {hamLocked ? (
-                      <p className="scenario-modal-note">Ara cüzde olduğunuz için ham sayısı döngü tamamlanana kadar sabit kalır.</p>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <p className="eyebrow">Aylık Mod</p>
-                    <div className="scenario-detail-section">
-                      <h2>{scenario.modalBoundary ? 'Kaç Ham Alacaksın?' : 'Kaç Ham?'}</h2>
-                      <div className="scenario-modal-ham-group">
-                        <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': availableHamOptions.length }}>
-                          {availableHamOptions.map((option) => (
-                            <button
-                              key={option}
-                              className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${scenario.modalHamSelection === option ? 'scenario-modal-option-active' : ''}`}
-                              data-modal-ham={option}
-                              type="button"
-                              disabled={hamLocked}
-                              onClick={() => applyHamSelection(option)}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          className={`scenario-option scenario-modal-option scenario-modal-option-repeat ${scenario.modalHamSelection === 'repeat' ? 'scenario-modal-option-active' : ''}`}
-                          data-modal-ham="repeat"
-                          type="button"
-                          disabled={hamLocked}
-                          onClick={() => applyHamSelection('repeat')}
-                        >
-                          Tekrar
-                        </button>
-                      </div>
-                      {hamLocked ? (
-                        <p className="scenario-modal-note">Ara cüzde olduğunuz için ham sayısı döngü tamamlanana kadar sabit kalır.</p>
-                      ) : null}
-                    </div>
-                    {shouldShowMonthlyLessonOptions ? (
-                      <div className="scenario-detail-section">
-                        <h2>Haftalık Kaç Ders?</h2>
-                        <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': monthlyLessonOptionMax + 1 }}>
-                          {Array.from({ length: monthlyLessonOptionMax + 1 }, (_, index) => (
-                            <button
-                              key={index}
-                              className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${scenario.modalLessonSelection === index ? 'scenario-modal-option-active' : ''}`}
-                              data-modal-lesson={index}
-                              type="button"
-                              onClick={() => selectScenarioLessonCount(index)}
-                            >
-                              {index}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-                <button
-                  className="scenario-button scenario-modal-start-button"
-                  type="button"
-                  disabled={!canStartScenario}
-                  onClick={startScenarioFromModal}
-                >
-                  Senaryoya Başla
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -1072,7 +1072,7 @@ function openScenarioModal(step, boundary = false) {
   state.scenario.modalOpen = true
   state.scenario.modalBoundary = boundary
   state.scenario.modalStep = step
-  state.scenario.modalHamSelection = null
+  state.scenario.modalHamSelection = state.scenario.currentHam
   state.scenario.modalLessonSelection = state.scenario.mode === 'monthly'
     ? state.scenario.selectedWeeklyLessonCount
     : null
@@ -1168,7 +1168,7 @@ function createScenarioState() {
   const monthView = getScenarioMonthView(today)
   const activeWeekIndex = monthView.visibleDays.find((day) => day.dateKey === toDateKey(today))?.weekIndex ?? 0
   const startDateKey = toDateKey(today)
-  const initialMode = null
+  const initialMode = 'weekly'
   const initialLessonCount = null
   const scenario = {
     initialRemaining: remainingPages,
@@ -1209,7 +1209,7 @@ function createScenarioState() {
     selectedWeeklyLessonCount: initialLessonCount,
     monthlyAutoRunning: false,
     monthlyWeekPlan: null,
-    modalStep: !isComplete ? 'mode' : null,
+    modalStep: !isComplete ? 'weekly-ham' : null,
     modalBoundary: false,
     modalHamSelection: initialHam,
     modalLessonSelection: initialLessonCount,
@@ -1745,7 +1745,7 @@ function finalizeScenarioModalSelection() {
   const scenario = state.scenario
   const selectedMode = scenario.mode ?? 'weekly'
   const hamLocked = !scenario.modalBoundary && scenario.virtualJuz > 0
-  const hamLevel = hamLocked ? scenario.currentHam : scenario.modalHamSelection
+  const hamLevel = hamLocked ? scenario.currentHam : (scenario.modalHamSelection ?? scenario.currentHam)
 
   if (hamLevel == null) {
     return
@@ -1833,7 +1833,7 @@ function selectScenarioMode(nextMode) {
   const hamLocked = !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
   state.scenario.modalHamSelection = hamLocked
     ? state.scenario.currentHam
-    : null
+    : (state.scenario.modalHamSelection ?? state.scenario.currentHam)
   state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
   render()
 }

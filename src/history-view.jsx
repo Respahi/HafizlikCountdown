@@ -24,7 +24,6 @@ import {
   startOfWeekMonday,
   toDateKey,
 } from './app-state.js'
-import { SegmentedTabs } from './components/SegmentedTabs.jsx'
 
 const HISTORY_WEEKDAY_MINI_LABELS = ['P', 'S', 'Ç', 'P', 'C', 'C', 'P']
 
@@ -238,7 +237,7 @@ function getHistoryTimeline(historyState) {
   const weightedHamTotal = getHistoryWeightedHamTotal(phaseCounts)
   const pastWeightedCapacity = Math.max(pace - currentHam, 0)
   const startDateKey = historyState.startDateKey
-  const endDateKey = state.completionDateKey ?? getTodayDateKey()
+  const endDateKey = getTodayDateKey()
   const endDate = parseDateKey(endDateKey)
   const invalidDateText = historyState.startDateText.trim() !== '' && !parseDateInputText(historyState.startDateText)
 
@@ -461,12 +460,8 @@ export function HistoryView() {
   const timeline = getHistoryTimeline(state.history)
   state.history.activeYear = timeline.activeYear
   const months = timeline.years.length > 0 ? getHistoryYearMonths(timeline.activeYear, timeline) : []
-  const periodEndDate = timeline.endDateKey ? parseDateKey(timeline.endDateKey) : null
   const shouldShowReport = state.history.reportReady && !timeline.validationMessage
   const shouldShowValidation = state.history.reportAttempted && Boolean(timeline.validationMessage)
-  const historyNote = shouldShowReport
-    ? `Başlangıçtan ${periodEndDate ? formatDate(periodEndDate) : 'bugüne'} kadar olan tahmini ders düzeni.`
-    : (shouldShowValidation ? timeline.validationMessage : '')
 
   const triggerStepperError = (key) => {
     if (invalidStepperTimerRef.current) {
@@ -525,9 +520,7 @@ export function HistoryView() {
 
   const syncDateSegments = (nextSegments) => {
     const parsedDateKey = buildDateKeyFromSegments(nextSegments)
-    state.history.startDateText = parsedDateKey
-      ? formatDateInputText(parsedDateKey)
-      : buildMaskedDateText(nextSegments)
+    state.history.startDateText = buildMaskedDateText(nextSegments)
     state.history.startDateKey = parsedDateKey
 
     if (parsedDateKey) {
@@ -608,13 +601,13 @@ export function HistoryView() {
     const rawYear = dateSegments.year ?? ''
 
     if (dayInputRef.current && document.activeElement === dayInputRef.current) {
-        dayInputRef.current.setSelectionRange(rawDay.length, rawDay.length)
+      dayInputRef.current.setSelectionRange(rawDay.length, rawDay.length)
     }
     if (monthInputRef.current && document.activeElement === monthInputRef.current) {
-        monthInputRef.current.setSelectionRange(rawMonth.length, rawMonth.length)
+      monthInputRef.current.setSelectionRange(rawMonth.length, rawMonth.length)
     }
     if (yearInputRef.current && document.activeElement === yearInputRef.current) {
-        yearInputRef.current.setSelectionRange(rawYear.length, rawYear.length)
+      yearInputRef.current.setSelectionRange(rawYear.length, rawYear.length)
     }
   }, [dateSegments.day, dateSegments.month, dateSegments.year])
 
@@ -658,18 +651,24 @@ export function HistoryView() {
     })
   }
 
+  const handleSegmentPointerDown = (segment, ref) => (event) => {
+    event.preventDefault()
+    if (dateSegments[segment]?.length > 0) {
+      syncDateSegments({
+        ...dateSegments,
+        [segment]: '',
+      })
+    }
+
+    window.requestAnimationFrame(() => {
+      ref.current?.focus()
+      ref.current?.select()
+    })
+  }
+
   return (
     <main className="history-layout">
       <section className="history-main">
-        <div className="view-topbar">
-          <SegmentedTabs activeView="history" />
-        </div>
-
-        <header className="history-header history-header-compact">
-          <div></div>
-          <p className="history-note">{historyNote}</p>
-        </header>
-
         <section className="history-board">
           <div className="history-board-toolbar">
             <div>
@@ -782,11 +781,7 @@ export function HistoryView() {
                     value={(dateSegments.day || '').padEnd(2, '_')}
                     onChange={handleSegmentChange('day', 2, monthInputRef)}
                     onKeyDown={handleSegmentKeyDown('day')}
-                    onClick={() => {
-                      if (dayInputRef.current.selectionStart > dateSegments.day.length) {
-                        dayInputRef.current.setSelectionRange(dateSegments.day.length, dateSegments.day.length)
-                      }
-                    }}
+                    onMouseDown={handleSegmentPointerDown('day', dayInputRef)}
                   />
                   <span className="history-date-slash">/</span>
                   <input
@@ -797,11 +792,7 @@ export function HistoryView() {
                     value={(dateSegments.month || '').padEnd(2, '_')}
                     onChange={handleSegmentChange('month', 2, yearInputRef)}
                     onKeyDown={handleSegmentKeyDown('month', dayInputRef)}
-                    onClick={() => {
-                      if (monthInputRef.current.selectionStart > dateSegments.month.length) {
-                        monthInputRef.current.setSelectionRange(dateSegments.month.length, dateSegments.month.length)
-                      }
-                    }}
+                    onMouseDown={handleSegmentPointerDown('month', monthInputRef)}
                   />
                   <span className="history-date-slash">/</span>
                   <input
@@ -812,11 +803,7 @@ export function HistoryView() {
                     value={(dateSegments.year || '').padEnd(4, '_')}
                     onChange={handleSegmentChange('year', 4)}
                     onKeyDown={handleSegmentKeyDown('year', monthInputRef)}
-                    onClick={() => {
-                      if (yearInputRef.current.selectionStart > dateSegments.year.length) {
-                        yearInputRef.current.setSelectionRange(dateSegments.year.length, dateSegments.year.length)
-                      }
-                    }}
+                    onMouseDown={handleSegmentPointerDown('year', yearInputRef)}
                   />
                 </div>
               </label>
@@ -835,7 +822,7 @@ export function HistoryView() {
             </div>
 
             <div className="control-card">
-              <p className="eyebrow">Ham Sayıları</p>
+              <p className="eyebrow">Geçmişteki Ham Sayıları</p>
               <div className="history-phase-list">
                 {[2, 3, 4, 5].map((ham) => (
                   <div key={ham} className="history-phase-row">
