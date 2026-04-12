@@ -923,6 +923,203 @@ h2 {
   padding: 24px;
   display: grid;
   gap: 18px;
+  position: relative;
+}
+
+.scenario-control-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.scenario-control-stack-disabled {
+  pointer-events: none;
+}
+
+.scenario-control-stack-disabled .scenario-control-card {
+  opacity: 0.48;
+  filter: blur(0.7px);
+}
+
+.scenario-control-card {
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(245, 239, 229, 0.92));
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+  transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease, box-shadow 220ms ease;
+}
+
+.scenario-control-card-active {
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 14px 28px rgba(58, 44, 32, 0.1);
+}
+
+.scenario-control-card-inactive {
+  opacity: 0.52;
+  filter: blur(0.65px) saturate(0.84);
+  box-shadow: none;
+}
+
+.scenario-control-card-spotlight {
+  box-shadow:
+    0 0 0 1px rgba(87, 182, 112, 0.45),
+    0 0 28px rgba(87, 182, 112, 0.26),
+    0 14px 28px rgba(58, 44, 32, 0.12);
+  animation: scenario-card-spotlight 1.8s ease-in-out infinite;
+}
+
+.scenario-control-card-floating {
+  margin-top: -54px;
+  z-index: 2;
+  box-shadow:
+    0 18px 38px rgba(37, 28, 20, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.scenario-control-card-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.scenario-control-card-head {
+  display: grid;
+  gap: 0;
+}
+
+.scenario-control-card-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scenario-control-card-title {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.15;
+  flex: 1;
+}
+
+.scenario-settings-button,
+.scenario-settings-close {
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  border-radius: 999px;
+  background: rgba(46, 42, 37, 0.06);
+  color: #3a2c20;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.scenario-settings-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.scenario-settings-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.scenario-settings-button:hover,
+.scenario-settings-close:hover {
+  border-color: rgba(17, 17, 17, 0.22);
+  background: rgba(46, 42, 37, 0.1);
+}
+
+.scenario-control-card-shell {
+  position: relative;
+  display: grid;
+}
+
+.scenario-control-card-shell .scenario-control-card {
+  grid-area: 1 / 1;
+}
+
+.scenario-control-card-shell-overlay-active .scenario-control-card {
+  opacity: 0.22;
+  filter: blur(1.8px) saturate(0.72);
+}
+
+.scenario-control-action {
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-self: center;
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+  width: min(100%, 248px);
+}
+
+.scenario-control-action .scenario-modal-start-button {
+  pointer-events: auto;
+  margin-top: 0;
+  width: 100%;
+  box-shadow: 0 18px 34px rgba(37, 28, 20, 0.18);
+}
+
+.scenario-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: start stretch;
+  padding: 12px;
+  background: rgba(28, 22, 18, 0.22);
+  border-radius: 28px;
+  z-index: 5;
+}
+
+.scenario-settings-modal {
+  width: 100%;
+  padding: 18px;
+}
+
+.scenario-settings-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.scenario-settings-modal-head h2 {
+  margin: 0;
+}
+
+.scenario-setup-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.scenario-setup-card-disabled {
+  pointer-events: none;
+}
+
+.scenario-setup-card-disabled .scenario-setup-fieldset {
+  opacity: 0.42;
+  filter: blur(0.5px);
+  transition: opacity 320ms ease, filter 320ms ease;
+  pointer-events: none;
+}
+
+.scenario-setup-fieldset {
+  transition: opacity 320ms ease, filter 320ms ease;
 }
 
 .scenario-setup-section {
@@ -932,6 +1129,22 @@ h2 {
 
 .scenario-setup-detail {
   padding-top: 2px;
+}
+
+@keyframes scenario-card-spotlight {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(87, 182, 112, 0.38),
+      0 0 18px rgba(87, 182, 112, 0.18),
+      0 14px 28px rgba(58, 44, 32, 0.1);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(87, 182, 112, 0.62),
+      0 0 34px rgba(87, 182, 112, 0.34),
+      0 14px 28px rgba(58, 44, 32, 0.12);
+  }
 }
 
 .scenario-month-bar {
@@ -1452,7 +1665,7 @@ h2 {
 
 .scenario-actions {
   display: grid;
-  grid-template-columns: repeat(8, minmax(64px, 82px));
+  grid-template-columns: repeat(var(--action-count, 8), minmax(64px, 82px));
   justify-content: center;
   gap: 6px;
   width: fit-content;
@@ -2802,6 +3015,14 @@ h2 {
     flex-direction: column;
     align-items: stretch;
     gap: 18px;
+  }
+
+  .scenario-control-card-floating {
+    margin-top: 0;
+  }
+
+  .scenario-control-action-floating {
+    margin-top: 0;
   }
 
   .scenario-setup-column,

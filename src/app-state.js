@@ -1071,11 +1071,17 @@ function openScenarioModal(step, boundary = false) {
 
   state.scenario.modalOpen = true
   state.scenario.modalBoundary = boundary
-  state.scenario.modalStep = step
-  state.scenario.modalHamSelection = state.scenario.currentHam
-  state.scenario.modalLessonSelection = state.scenario.mode === 'monthly'
-    ? state.scenario.selectedWeeklyLessonCount
-    : null
+  state.scenario.modalStep = boundary && state.scenario.mode === 'monthly' ? 'monthly-ham' : step
+
+  if (boundary) {
+    state.scenario.modalHamSelection = null
+    state.scenario.modalLessonSelection = null
+  } else {
+    state.scenario.modalHamSelection = state.scenario.currentHam
+    state.scenario.modalLessonSelection = state.scenario.mode === 'monthly'
+      ? state.scenario.selectedWeeklyLessonCount
+      : null
+  }
   state.scenario.monthlyAutoRunning = false
   state.scenario.locked = false
 }
@@ -1197,6 +1203,7 @@ function createScenarioState() {
     visibleDays: monthView.visibleDays,
     windowResults: {},
     animatedResultKeys: [],
+    hasStarted: isComplete,
     modalOpen: !isComplete,
     modalDismissed: false,
     boundaryReached: false,
@@ -1206,13 +1213,14 @@ function createScenarioState() {
     incoming: false,
     mode: initialMode,
     previousModeSelection: initialMode,
+    modeSelected: false,
     selectedWeeklyLessonCount: initialLessonCount,
     monthlyAutoRunning: false,
     monthlyWeekPlan: null,
     modalStep: !isComplete ? 'weekly-ham' : null,
     modalBoundary: false,
-    modalHamSelection: initialHam,
-    modalLessonSelection: initialLessonCount,
+    modalHamSelection: null,
+    modalLessonSelection: null,
     includeSundayStudy: state.preferredScenarioSundayEnabled === true,
     includeHolidayStudy: state.preferredScenarioHolidayEnabled === true,
   }
@@ -1261,6 +1269,7 @@ function createCompletedScenarioViewState() {
     visibleDays: finalMonthView.visibleDays,
     windowResults: {},
     animatedResultKeys: [],
+    hasStarted: true,
     modalOpen: false,
     boundaryReached: false,
     locked: false,
@@ -1588,9 +1597,8 @@ function commitScenarioToMain(nextView = 'main') {
   state.filledCount = projected.filledCount
   state.pace = projected.pace
   state.juz = projected.juz
-  state.committedMarks = projected.marks
-    .filter((mark) => mark.progressIndex > state.baselineCount && mark.progressIndex <= projected.filledCount)
-    .slice(-320)
+  state.baselineCount = projected.filledCount
+  state.committedMarks = []
   state.carryRedCount = projected.pendingRedCount
   state.spentStudyDays = projected.spentStudyDays
   state.closedStudyDays = projected.closedStudyDays
@@ -1781,6 +1789,7 @@ function finalizeScenarioModalSelection() {
   scenario.modalStep = null
   scenario.modalHamSelection = null
   scenario.modalLessonSelection = null
+  scenario.hasStarted = true
   scenario.locked = true
   state.preferredScenarioHam = hamLevel
   state.preferredScenarioMode = selectedMode
@@ -1827,14 +1836,29 @@ function selectScenarioMode(nextMode) {
     return
   }
 
+  const isModeChanged = state.scenario.mode !== nextMode || !state.scenario.modeSelected
+  const shouldResetMonthlyBoundarySelection = state.scenario.modalBoundary && nextMode === 'monthly'
   state.scenario.mode = nextMode
   state.scenario.previousModeSelection = nextMode
-  state.scenario.modalStep = nextMode === 'monthly' ? 'monthly-config' : 'weekly-ham'
-  const hamLocked = !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
-  state.scenario.modalHamSelection = hamLocked
-    ? state.scenario.currentHam
-    : (state.scenario.modalHamSelection ?? state.scenario.currentHam)
-  state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
+  state.scenario.modeSelected = true
+  state.scenario.modalStep = nextMode === 'monthly'
+    ? (shouldResetMonthlyBoundarySelection ? 'monthly-ham' : 'monthly-config')
+    : 'weekly-ham'
+
+  if (isModeChanged && !state.scenario.hasStarted) {
+    state.scenario.modalHamSelection = nextMode === 'monthly' ? state.scenario.currentHam : null
+    state.scenario.modalLessonSelection = null
+  } else if (shouldResetMonthlyBoundarySelection) {
+    state.scenario.modalHamSelection = null
+    state.scenario.modalLessonSelection = null
+  } else {
+    const hamLocked = !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
+    state.scenario.modalHamSelection = hamLocked
+      ? state.scenario.currentHam
+      : (state.scenario.modalHamSelection ?? state.scenario.currentHam)
+    state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
+  }
+
   render()
 }
 
@@ -1903,6 +1927,12 @@ function applyHamSelection(nextHamLevel) {
   }
 
   state.scenario.modalHamSelection = nextHamLevel === 'repeat' ? 'repeat' : nextHamLevel
+
+  if (state.scenario.mode === 'monthly') {
+    state.scenario.modalStep = 'monthly-lessons'
+    state.scenario.modalLessonSelection = null
+  }
+
   render()
 }
 

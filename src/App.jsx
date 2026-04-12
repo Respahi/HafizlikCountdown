@@ -2,6 +2,7 @@ import { useEffect, useReducer } from 'react'
 import { closeCompletionModal, formatDate, parseDateKey, state, subscribe } from './app-state.js'
 import { MainView } from './main-table.jsx'
 import { ScenarioView } from './scenario-view.jsx'
+import { ErrorBoundary } from './ErrorBoundary.jsx'
 import { HistoryView } from './history-view.jsx'
 import { CompletionModal } from './components/CompletionModal.jsx'
 import { SegmentedTabs } from './components/SegmentedTabs.jsx'
@@ -22,7 +23,7 @@ export default function App() {
       <div className="app-topbar">
         <SegmentedTabs activeView={appState.view} />
       </div>
-      {appState.view === 'scenario' ? <ScenarioView state={appState} /> : null}
+      {appState.view === 'scenario' ? <ErrorBoundary><ScenarioView state={appState} /></ErrorBoundary> : null}
       {appState.view === 'history' ? <HistoryView state={appState} /> : null}
       {appState.view === 'main' ? <MainView state={appState} /> : null}
       {appState.completionModalOpen && appState.filledCount >= 600 && appState.completionDateKey ? (
