@@ -1169,6 +1169,7 @@ function startScenarioMonthTransition() {
 function createScenarioState() {
   const remainingPages = Math.max(TOTAL_CELLS - state.filledCount, 0)
   const isComplete = remainingPages === 0
+  const startsAtBoundary = !isComplete && state.juz >= COLUMNS
   const initialHam = state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1
   const today = startOfDay(new Date())
   const monthView = getScenarioMonthView(today)
@@ -1218,7 +1219,7 @@ function createScenarioState() {
     monthlyAutoRunning: false,
     monthlyWeekPlan: null,
     modalStep: !isComplete ? 'weekly-ham' : null,
-    modalBoundary: false,
+    modalBoundary: startsAtBoundary,
     modalHamSelection: null,
     modalLessonSelection: null,
     includeSundayStudy: state.preferredScenarioSundayEnabled === true,

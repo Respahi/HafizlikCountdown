@@ -112,6 +112,8 @@ export function ScenarioView({ state }) {
       ? (scenario.modeSelected && selectedHamValue != null && (isInitialSetup || isBoundarySetup))
       : (scenario.modeSelected && selectedLessonCount != null && (isInitialSetup || isBoundarySetup || isMonthlyPausedForSetup))
   )
+  const showWeeklyStartOverlay = isWeeklyMode && showStartAction
+  const showMonthlyStartCard = isMonthlyMode && showStartAction
   const startButtonDisabled = (
     !canStartScenario
     || setupPanelDisabled
@@ -180,7 +182,7 @@ export function ScenarioView({ state }) {
                   {availableHamOptions.map((option) => (
                     <button
                       key={option}
-                      className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${selectedHamValue === option ? 'scenario-modal-option-active' : ''}`}
+                      className={`scenario-option scenario-modal-option scenario-monthly-lesson-option scenario-ham-choice-option ${selectedHamValue === option ? 'scenario-modal-option-active' : ''}`}
                       data-modal-ham={option}
                       type="button"
                       disabled={!card2Interactive || hamLocked}
@@ -191,7 +193,7 @@ export function ScenarioView({ state }) {
                   ))}
                 </div>
                 <button
-                  className={`scenario-option scenario-modal-option scenario-modal-option-repeat ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
+                  className={`scenario-option scenario-modal-option scenario-modal-option-repeat scenario-ham-choice-option ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
                   data-modal-ham="repeat"
                   type="button"
                   disabled={!card2Interactive || hamLocked}
@@ -203,13 +205,15 @@ export function ScenarioView({ state }) {
             </fieldset>
           </section>
 
-          {showCard3 || showStartAction ? (
-            <div className={`scenario-control-card-shell ${showCard3 && showStartAction ? 'scenario-control-card-shell-overlay-active' : ''}`}>
+          {showCard3 || showWeeklyStartOverlay ? (
+            <div className={`scenario-control-card-shell ${showCard3 && showWeeklyStartOverlay ? 'scenario-control-card-shell-overlay-active' : ''}`}>
               {showCard3 ? (
                 <section className={`scenario-control-card ${card3Interactive ? 'scenario-control-card-active' : 'scenario-control-card-inactive'} ${spotlightLessonCard ? 'scenario-control-card-spotlight' : ''}`}>
                   <fieldset className="scenario-control-card-fieldset" disabled={!card3Interactive}>
                     <div className="scenario-control-card-head">
-                      <h2 className="scenario-control-card-title">3. Bu Hafta Kaç Ders Vereceksin</h2>
+                      <h2 className="scenario-control-card-title">
+                        {isWeeklyMode ? '3. Bu Hafta Kaç Ders Vereceksin' : '3. Haftalık Kaç Ders?'}
+                      </h2>
                     </div>
                     {isWeeklyMode ? (
                       <div className="scenario-monthly-lesson-strip" style={{ '--scenario-lesson-count': weeklyChoiceButtonMax + 1 }}>
@@ -255,7 +259,7 @@ export function ScenarioView({ state }) {
                 </section>
               ) : null}
 
-              {showStartAction ? (
+              {showWeeklyStartOverlay ? (
                 <div className="scenario-control-action">
                   <button
                     className="scenario-button scenario-modal-start-button"
@@ -268,6 +272,19 @@ export function ScenarioView({ state }) {
                 </div>
               ) : null}
             </div>
+          ) : null}
+
+          {showMonthlyStartCard ? (
+            <section className="scenario-control-card scenario-control-card-active scenario-control-card-action-card">
+              <button
+                className="scenario-button scenario-modal-start-button"
+                type="button"
+                disabled={startButtonDisabled}
+                onClick={startScenarioFromModal}
+              >
+                {scenario.hasStarted ? 'Senaryoya Devam' : 'Senaryoyu Başlat'}
+              </button>
+            </section>
           ) : null}
         </div>
 
@@ -365,14 +382,17 @@ export function ScenarioView({ state }) {
                 </div>
                 <div className="scenario-calendar-grid">
                   {displayMonth.visibleDays.map((day, index) => {
+                    const isOutsideMonth = !day.isCurrentMonth
+                    const isPastAdjacentDay = isOutsideMonth && day.dateKey < displayMonthStartKey
                     const result = scenario.windowResults[day.dateKey] ?? scenarioEntryMap.get(day.dateKey)
-                    const staticEntry = day.isCurrentMonth && day.isClosed ? createScenarioClosedEntry(day) : null
+                    const staticEntry = (day.isCurrentMonth || isPastAdjacentDay) && day.isClosed
+                      ? createScenarioClosedEntry(day)
+                      : null
                     const visual = getScenarioVisual(result ?? staticEntry)
                     const dayLabel = day.isCurrentMonth && day.isSunday
                       ? 'Pazar'
                       : (day.isCurrentMonth && day.isHoliday ? 'Tatil' : visual.label)
                     const isPastStartDay = isScenarioPastStartDay(scenario, day)
-                    const isOutsideMonth = !day.isCurrentMonth
                     const isPastWeek = isViewingCurrentMonth ? day.weekIndex < scenario.activeWeekIndex : displayMonthStartKey < scenario.monthStartKey
                     const isActiveWeek = isViewingCurrentMonth && day.weekIndex === scenario.activeWeekIndex
                     const isFutureWeek = isViewingCurrentMonth && day.weekIndex > scenario.activeWeekIndex
@@ -391,7 +411,7 @@ export function ScenarioView({ state }) {
                       : (scenario.incoming ? (isMonthlyMode ? 'scenario-tile-wave-in-monthly' : 'scenario-tile-wave-in') : '')
                     const fillOrder = animatedOrderMap.get(day.dateKey) ?? day.weekdayIndex
                     const mutedFillClass = isOutsideMonth
-                      ? 'scenario-tile-fill-adjacent'
+                      ? (isPastAdjacentDay ? 'scenario-tile-fill-muted' : 'scenario-tile-fill-adjacent')
                       : (!visual.fillClass && (isPastWeek || isFutureWeek || isPastStartDay)
                           ? `scenario-tile-fill-${isFutureWeek ? 'locked' : 'muted'}`
                           : '')
