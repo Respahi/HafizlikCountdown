@@ -6,7 +6,6 @@ import { ErrorBoundary } from './ErrorBoundary.jsx'
 import { HistoryView } from './history-view.jsx'
 import { CompletionModal } from './components/CompletionModal.jsx'
 import { SegmentedTabs } from './components/SegmentedTabs.jsx'
-import { UsageGuideModal } from './components/UsageGuideModal.jsx'
 
 function useAppStore() {
   const [, forceRender] = useReducer((value) => value + 1, 0)
@@ -18,21 +17,16 @@ function useAppStore() {
 
 export default function App() {
   const appState = useAppStore()
-  const [guideOpen, setGuideOpen] = useState(false)
 
   return (
     <>
       <div className="app-topbar">
         <div className="app-topbar-group">
-          <SegmentedTabs activeView={appState.view} />
-          <button
-            className={`guide-trigger guide-trigger-${appState.view}`}
-            type="button"
-            aria-label={`${appState.view} ekranı kullanım kılavuzu`}
-            onClick={() => setGuideOpen(true)}
-          >
-            ?
-          </button>
+          <SegmentedTabs
+            activeView={appState.view}
+            canOpenScenario={appState.mainDataApplied}
+            canOpenHistory={appState.mainDataApplied}
+          />
         </div>
       </div>
       {appState.view === 'scenario' ? <ErrorBoundary><ScenarioView state={appState} /></ErrorBoundary> : null}
@@ -44,7 +38,6 @@ export default function App() {
           onClose={closeCompletionModal}
         />
       ) : null}
-      {guideOpen ? <UsageGuideModal view={appState.view} onClose={() => setGuideOpen(false)} /> : null}
     </>
   )
 }

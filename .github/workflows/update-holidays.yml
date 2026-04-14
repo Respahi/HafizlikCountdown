@@ -1,0 +1,43 @@
+name: Update Holiday Data
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-holidays:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh holiday data
+        run: npm run update:holidays
+
+      - name: Verify production build
+        run: npm run build
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'chore: refresh holiday data'
+          title: 'chore: refresh holiday data'
+          body: |
+            Automated holiday data refresh from configured Diyanet and MEB sources.
+          branch: codex/update-holiday-data
+          delete-branch: true

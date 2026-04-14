@@ -739,18 +739,17 @@ export function HistoryView() {
                 </div>
               </div>
             </div>
-            <div className="summary-row"><span>Kaç ham aldı</span><strong>{getHamSelectionLabel(state.history.reportBasis ? state.history.reportBasis.hamCount : state.history.inputHamCount)}</strong></div>
-            <div className="summary-row"><span>Toplam geçen gün</span><strong>{timeline.totalElapsedDays}</strong></div>
-            <div className="summary-row"><span>Ders verilen gün</span><strong>{timeline.studyDays}</strong></div>
-            <div className="summary-row"><span>Ders verilmeyen gün</span><strong>{timeline.missedDays}</strong></div>
+            <div className="summary-row"><span>Kaç Ham Aldı</span><strong>{getHamSelectionLabel(state.history.reportBasis ? state.history.reportBasis.hamCount : state.history.inputHamCount)}</strong></div>
+            <div className="summary-row"><span>Toplam Geçen Gün</span><strong>{timeline.totalElapsedDays}</strong></div>
+            <div className="summary-row"><span>Ders Verilen Gün</span><strong>{timeline.studyDays}</strong></div>
+            <div className="summary-row"><span>Ders Verilmeyen Gün</span><strong>{timeline.missedDays}</strong></div>
             <div className="summary-row"><span>Pazar + Tatil</span><strong>{timeline.blockedDays}</strong></div>
-            <div className="summary-row"><span>Gri kare hesabı</span><strong>{timeline.baselineCount}</strong></div>
+            <div className="summary-row"><span>Ezberlenen Sayfa Sayısı</span><strong>{timeline.baselineCount}</strong></div>
             <div className="summary-row">
-              <span>Mükemmel Bitiriş Tarihi</span>
+              <span>İdeal Bitiş Tarihi</span>
               <strong>{timeline.perfectFinishDateKey ? formatDate(parseDateKey(timeline.perfectFinishDateKey)) : '--'}</strong>
             </div>
             <div className="summary-row"><span>Ziyade Zaman</span><strong>{timeline.ziyadeZamanLabel}</strong></div>
-            <p className="summary-note">1 ham geçmişi otomatik kabul edilir. 2-5 ham girişleri yalnızca geçmişte tamamlanmış 30 cüz bloklarını renklendirmek için kullanılır.</p>
             <button className="apply-button" type="button" onClick={handleEdit}>Yeni Veri Girişi</button>
           </div>
         ) : (

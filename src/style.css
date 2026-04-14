@@ -126,42 +126,6 @@ input {
   isolation: isolate;
 }
 
-.guide-trigger {
-  flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
-  border: 1px solid rgba(17, 17, 17, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 252, 246, 0.94);
-  color: #2f2416;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: 0 12px 24px rgba(17, 17, 17, 0.08);
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
-}
-
-.guide-trigger:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 28px rgba(17, 17, 17, 0.12);
-}
-
-.guide-trigger-main {
-  background: #f4fbf4;
-  color: #27522d;
-}
-
-.guide-trigger-scenario {
-  background: #fff6eb;
-  color: #8b5519;
-}
-
-.guide-trigger-history {
-  background: #eef5ff;
-  color: #315892;
-}
 
 .folder-tab-slider {
   position: absolute;
@@ -970,6 +934,7 @@ h2 {
   position: sticky;
   top: 24px;
   align-self: start;
+  margin-top: 16px;
 }
 
 .scenario-setup-card {
@@ -2997,247 +2962,6 @@ h2 {
   gap: 10px;
 }
 
-.guide-main-topline {
-  grid-template-columns: 1.1fr 0.62fr;
-}
-
-.guide-main-title-block,
-.guide-main-date-block,
-.guide-main-sidebar-line,
-.guide-main-sidebar-stepper,
-.guide-main-sidebar-button,
-.guide-scenario-preview-line,
-.guide-history-summary-line {
-  display: block;
-  border-radius: 14px;
-  background: rgba(31, 26, 23, 0.1);
-}
-
-.guide-main-title-block {
-  height: 24px;
-}
-
-.guide-main-date-block {
-  height: 42px;
-  background: var(--guide-accent-soft);
-}
-
-.guide-main-body {
-  grid-template-columns: minmax(0, 1fr) 220px;
-  align-items: start;
-}
-
-.guide-main-grid {
-  display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 6px;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-main-cell {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  border: 1px solid rgba(17, 17, 17, 0.08);
-  background: rgba(31, 26, 23, 0.06);
-}
-
-.guide-main-cell-filled {
-  background: rgba(90, 171, 99, 0.38);
-}
-
-.guide-main-cell-marked {
-  background: rgba(216, 143, 54, 0.34);
-}
-
-.guide-main-sidebar {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-main-sidebar-line {
-  height: 18px;
-}
-
-.guide-main-sidebar-line-lg {
-  height: 22px;
-}
-
-.guide-main-sidebar-stepper {
-  height: 50px;
-}
-
-.guide-main-sidebar-button {
-  height: 46px;
-  background: var(--guide-accent-soft);
-}
-
-.guide-scenario-cards {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.guide-scenario-card {
-  min-height: 74px;
-  border-radius: 20px;
-  background: rgba(31, 26, 23, 0.08);
-  display: grid;
-  place-items: center;
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: rgba(31, 26, 23, 0.42);
-}
-
-.guide-scenario-card-active {
-  background: var(--guide-accent-soft);
-  color: #2f2416;
-}
-
-.guide-scenario-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-scenario-day {
-  aspect-ratio: 1;
-  border-radius: 14px;
-  border: 1px solid rgba(17, 17, 17, 0.08);
-  background: rgba(31, 26, 23, 0.06);
-}
-
-.guide-scenario-day-success {
-  background: rgba(90, 171, 99, 0.34);
-}
-
-.guide-scenario-day-holiday {
-  background: rgba(216, 143, 54, 0.28);
-}
-
-.guide-scenario-preview {
-  grid-template-columns: 1fr;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-scenario-preview-line {
-  height: 18px;
-}
-
-.guide-scenario-preview-line-wide {
-  height: 44px;
-  background: var(--guide-accent-soft);
-}
-
-.guide-history-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-history-day {
-  aspect-ratio: 1;
-  border-radius: 10px;
-  background: rgba(31, 26, 23, 0.06);
-}
-
-.guide-history-day-study {
-  background: rgba(79, 131, 200, 0.32);
-}
-
-.guide-history-day-missed {
-  background: rgba(150, 60, 60, 0.26);
-}
-
-.guide-history-summary {
-  padding: 14px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.guide-history-summary-line {
-  height: 18px;
-}
-
-.guide-history-summary-line-wide {
-  height: 44px;
-  background: var(--guide-accent-soft);
-}
-
-.guide-role-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.guide-role-card,
-.guide-panel {
-  border: 1px solid rgba(17, 17, 17, 0.08);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 18px;
-}
-
-.guide-role-list,
-.guide-note-list {
-  margin: 0;
-  padding-left: 20px;
-  display: grid;
-  gap: 10px;
-  color: #2f2416;
-  line-height: 1.55;
-}
-
-.guide-role-list-ordered {
-  padding-left: 22px;
-}
-
-.guide-panel {
-  display: grid;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.guide-panel-head {
-  display: grid;
-  gap: 6px;
-}
-
-.guide-feature-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.guide-feature-card {
-  border-radius: 20px;
-  padding: 14px;
-  background: rgba(31, 26, 23, 0.04);
-  border: 1px solid rgba(17, 17, 17, 0.06);
-}
-
-.guide-feature-card h4 {
-  margin: 0 0 8px;
-  font-size: 1rem;
-}
-
-.guide-feature-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
 
 .completion-modal-backdrop {
   position: fixed;
@@ -3540,11 +3264,6 @@ h2 {
     min-height: auto;
   }
 
-  .guide-hero,
-  .guide-role-grid,
-  .guide-feature-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 1360px) {
@@ -3622,29 +3341,6 @@ h2 {
     width: 100%;
   }
 
-  .guide-trigger {
-    width: 100%;
-    height: 44px;
-    border-radius: 16px;
-  }
-
-  .guide-modal-backdrop {
-    padding: 12px;
-  }
-
-  .guide-modal {
-    padding: 18px;
-    border-radius: 24px;
-  }
-
-  .guide-modal-head {
-    flex-direction: column;
-  }
-
-  .guide-system-flow,
-  .guide-main-body {
-    grid-template-columns: 1fr;
-  }
 
   .folder-tab {
     padding: 11px 12px;

@@ -1,3 +1,5 @@
+import { getHolidaySet as getHolidaySetFromData } from './holiday-data.js'
+
 const ROWS = 20
 const COLUMNS = 30
 const TOTAL_CELLS = ROWS * COLUMNS
@@ -45,33 +47,6 @@ const HAM_CONFIG = {
   },
 }
 
-const RELIGIOUS_HOLIDAYS = {
-  2024: {
-    ramadan: ['2024-04-08', '2024-04-09', '2024-04-10', '2024-04-11', '2024-04-12', '2024-04-13', '2024-04-14'],
-    sacrifice: ['2024-06-15', '2024-06-16', '2024-06-17', '2024-06-18', '2024-06-19'],
-  },
-  2025: {
-    ramadan: ['2025-03-29', '2025-03-30', '2025-03-31', '2025-04-01', '2025-04-02', '2025-04-03', '2025-04-04', '2025-04-05', '2025-04-06'],
-    sacrifice: ['2025-06-05', '2025-06-06', '2025-06-07', '2025-06-08', '2025-06-09'],
-  },
-  2026: {
-    ramadan: ['2026-03-19', '2026-03-20', '2026-03-21', '2026-03-22', '2026-03-23'],
-    sacrifice: ['2026-05-26', '2026-05-27', '2026-05-28', '2026-05-29', '2026-05-30'],
-  },
-  2027: {
-    ramadan: ['2027-03-09', '2027-03-10', '2027-03-11', '2027-03-12'],
-    sacrifice: ['2027-05-15', '2027-05-16', '2027-05-17', '2027-05-18', '2027-05-19'],
-  },
-  2028: {
-    ramadan: ['2028-02-26', '2028-02-27', '2028-02-28', '2028-02-29'],
-    sacrifice: ['2028-05-04', '2028-05-05', '2028-05-06', '2028-05-07', '2028-05-08'],
-  },
-  2029: {
-    ramadan: ['2029-02-14', '2029-02-15', '2029-02-16', '2029-02-17'],
-    sacrifice: ['2029-04-23', '2029-04-24', '2029-04-25', '2029-04-26', '2029-04-27'],
-  },
-}
-
 const savedState = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
 const savedHistory = savedState.history ?? {}
 const normalizedSavedMarks = Array.isArray(savedState.committedMarks)
@@ -116,6 +91,7 @@ const savedCompletedScenarioView = savedState.completedScenarioView && typeof sa
   : null
 
 const state = {
+  mainDataApplied: savedState.mainDataApplied === true,
   pace: clampNumber(savedState.pace ?? 0, 0, ROWS),
   juz: clampNumber(savedState.juz ?? 0, 0, COLUMNS),
   inputPace: clampNumber(
@@ -587,47 +563,8 @@ function renderCompletionModal() {
   `
 }
 
-function createDateRange(startDateKey, days) {
-  const dates = []
-  let cursor = parseDateKey(startDateKey)
-
-  for (let index = 0; index < days; index += 1) {
-    dates.push(toDateKey(cursor))
-    cursor = addDays(cursor, 1)
-  }
-
-  return dates
-}
-
-function getApproximateBreaks(year) {
-  return [
-    ...createDateRange(`${year}-01-15`, 7),
-    ...createDateRange(`${year}-06-01`, 7),
-    ...createDateRange(`${year}-08-25`, 7),
-  ]
-}
-
 function getHolidaySet(year) {
-  const fixedHolidays = [
-    `${year}-01-01`,
-    `${year}-04-23`,
-    `${year}-05-01`,
-    `${year}-05-19`,
-    `${year}-07-15`,
-    `${year}-08-30`,
-    `${year}-10-28`,
-    `${year}-10-29`,
-  ]
-
-  if (year >= 2026) {
-    fixedHolidays.push(`${year}-03-21`)
-  }
-
-  const religious = RELIGIOUS_HOLIDAYS[year]
-    ? [...RELIGIOUS_HOLIDAYS[year].ramadan, ...RELIGIOUS_HOLIDAYS[year].sacrifice]
-    : []
-
-  return new Set([...fixedHolidays, ...religious, ...getApproximateBreaks(year)])
+  return getHolidaySetFromData(year)
 }
 
 function isNonStudyDay(date, holidaySet) {
@@ -1377,6 +1314,12 @@ function setScenarioDateTransition(nextDate) {
 }
 
 function openScenarioView() {
+  if (!state.mainDataApplied) {
+    state.view = 'main'
+    render()
+    return
+  }
+
   clearScenarioTimers()
   if (!state.scenario) {
     state.scenario = state.filledCount >= TOTAL_CELLS && state.completedScenarioView
@@ -1397,6 +1340,12 @@ function openMainView() {
 }
 
 function openHistoryView() {
+  if (!state.mainDataApplied) {
+    state.view = 'main'
+    render()
+    return
+  }
+
   state.view = 'history'
   render()
 }
@@ -1656,6 +1605,15 @@ function projectScenarioOutcome() {
     }
   }
 
+  const zeroStartSelectedHam = (
+    state.pace === 0
+    && state.juz === 0
+    && scenario.virtualCount === 0
+    && scenario.virtualJuz === 0
+  )
+    ? (scenario.modalHamSelection ?? (scenario.hasStarted ? scenario.currentHam : null))
+    : null
+
   let nextFilledCount = state.filledCount
   let pendingRedCount = state.carryRedCount
   let spentStudyDays = state.spentStudyDays
@@ -1711,7 +1669,9 @@ function projectScenarioOutcome() {
     filledCount: nextFilledCount,
     baselineCount: state.baselineCount,
     marks: nextMarks.filter((mark) => mark.progressIndex <= nextFilledCount),
-    pace: scenario.virtualPace,
+    pace: zeroStartSelectedHam != null
+      ? getHamSelectionNumericValue(zeroStartSelectedHam)
+      : scenario.virtualPace,
     juz: scenario.virtualJuz,
     pendingRedCount,
     spentStudyDays,
@@ -1779,6 +1739,9 @@ function finalizeScenarioModalSelection() {
   scenario.monthlyWeekPlan = selectedMode === 'monthly'
     ? { lessonCount: scenario.modalLessonSelection }
     : null
+  if (!isBoundary && state.pace === 0 && state.juz === 0 && scenario.virtualCount === 0 && scenario.virtualJuz === 0) {
+    scenario.virtualPace = getHamSelectionNumericValue(hamLevel)
+  }
   if (isBoundary && hamLevel !== 'repeat') {
     scenario.virtualPace += hamLevel
   }
@@ -1973,6 +1936,7 @@ export function persistState() {
     JSON.stringify({
       pace: state.pace,
       juz: state.juz,
+      mainDataApplied: state.mainDataApplied,
       inputPace: state.inputPace,
       inputJuz: state.inputJuz,
       inputHamCount: state.inputHamCount,

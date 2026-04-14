@@ -1,7 +1,15 @@
 import { renderTabbedPanels } from '../app-state.js'
 
-export function SegmentedTabs({ activeView }) {
+export function SegmentedTabs({ activeView, canOpenScenario, canOpenHistory }) {
   const handleSelect = (nextView) => {
+    if (nextView === 'scenario' && !canOpenScenario) {
+      return
+    }
+
+    if (nextView === 'history' && !canOpenHistory) {
+      return
+    }
+
     if (nextView === activeView) {
       return
     }
@@ -18,20 +26,22 @@ export function SegmentedTabs({ activeView }) {
         type="button"
         onClick={() => handleSelect('main')}
       >
-        Ana Tablo
+        Hafızlık Tablosu
       </button>
       <button
-        className={`folder-tab ${activeView === 'scenario' ? 'folder-tab-active' : ''}`}
+        className={`folder-tab ${activeView === 'scenario' ? 'folder-tab-active' : ''} ${!canOpenScenario ? 'folder-tab-disabled' : ''}`}
         data-view-tab="scenario"
         type="button"
+        disabled={!canOpenScenario}
         onClick={() => handleSelect('scenario')}
       >
         Hayali Senaryo
       </button>
       <button
-        className={`folder-tab ${activeView === 'history' ? 'folder-tab-active' : ''}`}
+        className={`folder-tab ${activeView === 'history' ? 'folder-tab-active' : ''} ${!canOpenHistory ? 'folder-tab-disabled' : ''}`}
         data-view-tab="history"
         type="button"
+        disabled={!canOpenHistory}
         onClick={() => handleSelect('history')}
       >
         Geçmişin Hesabı

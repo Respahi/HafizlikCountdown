@@ -479,8 +479,8 @@ export function ScenarioView({ state }) {
           </div>
 
           <div className="control-card scenario-mini-card">
-            <p className="eyebrow">Ana Tablo Ön İzleme</p>
-            <div className="scenario-mini-grid" aria-label="Ana tablonun minyatür temsili">
+            <p className="eyebrow">Hafızlık Tablosu Ön İzleme</p>
+            <div className="scenario-mini-grid" aria-label="Hafızlık tablosunun minyatür temsili">
               {Array.from({ length: TOTAL_CELLS }, (_, index) => {
                 const order = getFillSequenceIndex(index)
                 const progressIndex = order + 1

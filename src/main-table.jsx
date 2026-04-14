@@ -127,6 +127,7 @@ export function MainView({ state }) {
     }
 
     const previousFilledCount = state.filledCount
+    appState.mainDataApplied = true
     appState.pace = rawPace
     appState.juz = rawJuz
     appState.inputPace = rawPace
@@ -176,6 +177,7 @@ export function MainView({ state }) {
   }
 
   const handleReset = () => {
+    appState.mainDataApplied = false
     appState.pace = 0
     appState.juz = 0
     appState.inputPace = 1
@@ -318,22 +320,22 @@ export function MainView({ state }) {
             type="button"
             onClick={handleApply}
           >
-            Tabloya aktar
+            Tabloya Aktar
           </button>
         </div>
 
         <div className="control-card summary-card">
           <p className="eyebrow">Durum Özeti</p>
           <div className="summary-row">
-            <span>Boyanan kare</span>
+            <span>Ezberlenen Sayfa Sayısı</span>
             <strong>{filledCount} / {TOTAL_CELLS}</strong>
           </div>
           <div className="summary-row">
-            <span>Kalan sayfa</span>
+            <span>Kalan Sayfa</span>
             <strong>{remainingPages}</strong>
           </div>
           <div className="summary-row">
-            <span>Tatil ek gün</span>
+            <span>Toplam Tatil Günleri</span>
             <strong>{estimate.extraDays}</strong>
           </div>
           <div className="summary-row">
@@ -341,13 +343,13 @@ export function MainView({ state }) {
             <strong>%{percent}</strong>
           </div>
           <div className="summary-row">
-            <span>Tahmini bitiş</span>
+            <span>Tahmini Bitiş Tarihi</span>
             <strong>{formatDate(displayEndDate)}</strong>
           </div>
           <p className="summary-note">
             Hesapta {estimate.sundays} Pazar ve {estimate.holidays} resmi tatil/ara tatil günü atlandı.
           </p>
-          <button className="reset-button" type="button" onClick={handleReset}>Ana Tabloyu Sıfırla</button>
+          <button className="reset-button" type="button" onClick={handleReset}>Hafızlık Tablosunu Sıfırla</button>
         </div>
       </aside>
     </main>
