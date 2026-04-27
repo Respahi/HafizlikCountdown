@@ -750,7 +750,7 @@ export function HistoryView() {
               <strong>{timeline.perfectFinishDateKey ? formatDate(parseDateKey(timeline.perfectFinishDateKey)) : '--'}</strong>
             </div>
             <div className="summary-row"><span>Ziyade Zaman</span><strong>{timeline.ziyadeZamanLabel}</strong></div>
-            <button className="apply-button" type="button" onClick={handleEdit}>Yeni Veri Girişi</button>
+            <button className="apply-button apply-button-history" type="button" onClick={handleEdit}>Yeni Veri Girişi</button>
           </div>
         ) : (
           <>
@@ -848,7 +848,7 @@ export function HistoryView() {
               </div>
               <p className="history-phase-note">Toplam ham yükü: <strong>{timeline.weightedHamTotal}</strong> / 20</p>
             </div>
-            <button className={`apply-button ${invalidReport ? 'apply-button-invalid' : ''}`} type="button" onClick={handleReport}>Durum Raporu</button>
+            <button className={`apply-button apply-button-history ${invalidReport ? 'apply-button-invalid' : ''}`} type="button" onClick={handleReport}>Durum Raporu</button>
           </>
         )}
       </aside>

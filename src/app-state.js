@@ -12,6 +12,9 @@ const SCENARIO_FILL_DURATION = 400
 const SCENARIO_POST_FILL_HOLD = 260
 const SCENARIO_WAVE_DELAY_STEP = 26
 const SCENARIO_WAVE_DURATION = 340
+const MAIN_MIRROR_FILL_DURATION = 520
+const MAIN_MIRROR_HOLD = 90
+const MAIN_MIRROR_BASE_DELAY_STEP = 10
 const HAM_OPTIONS = [1, 2, 3, 4, 5]
 const WEEKDAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 const HAM_CONFIG = {
@@ -47,7 +50,8 @@ const HAM_CONFIG = {
   },
 }
 
-const savedState = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+localStorage.removeItem(STORAGE_KEY)
+const savedState = {}
 const savedHistory = savedState.history ?? {}
 const normalizedSavedMarks = Array.isArray(savedState.committedMarks)
   ? savedState.committedMarks.map((mark) => ({
@@ -81,7 +85,9 @@ const savedCompletedScenarioView = savedState.completedScenarioView && typeof sa
       startMonthStartKey: typeof savedState.completedScenarioView.startMonthStartKey === 'string' ? savedState.completedScenarioView.startMonthStartKey : null,
       finalMonthStartKey: typeof savedState.completedScenarioView.finalMonthStartKey === 'string' ? savedState.completedScenarioView.finalMonthStartKey : null,
       completedEndDateKey: typeof savedState.completedScenarioView.completedEndDateKey === 'string' ? savedState.completedScenarioView.completedEndDateKey : null,
-      mode: savedState.completedScenarioView.mode === 'monthly' ? 'monthly' : 'weekly',
+      mode: savedState.completedScenarioView.mode === 'monthly'
+        ? 'monthly'
+        : (savedState.completedScenarioView.mode === 'annual' ? 'annual' : 'weekly'),
       selectedWeeklyLessonCount: savedState.completedScenarioView.selectedWeeklyLessonCount == null
         ? null
         : clampNumber(savedState.completedScenarioView.selectedWeeklyLessonCount, 0, 7),
@@ -450,6 +456,15 @@ function getProjectedEndDate(
 
 function shouldReuseScenarioHam(filledCount = state.filledCount, preferredScenarioHam = state.preferredScenarioHam) {
   return filledCount < TOTAL_CELLS && preferredScenarioHam != null
+}
+
+function canOpenScenarioView() {
+  return state.mainDataApplied || (
+    state.filledCount === 0
+    && state.baselineCount === 0
+    && state.pace === 0
+    && state.juz === 0
+  )
 }
 
 function shouldReuseScenarioConfiguration() {
@@ -946,6 +961,132 @@ function getScenarioBoundarySelectableHamLimit(scenario) {
   return Math.min(getScenarioBoundaryHamLimit(scenario), remainingPaceCapacity)
 }
 
+function createAnnualPhaseId() {
+  return `annual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getAnnualPlanLastPace(scenario) {
+  const lastPhase = [...(scenario.annualPhasePlan ?? [])].reverse().find((phase) => phase.status !== 'removed')
+  return lastPhase ? lastPhase.paceAfter : scenario.virtualPace
+}
+
+function getAnnualPhasePaceAfter(basePace, ham) {
+  return ham === 'repeat'
+    ? basePace
+    : Math.min(ROWS, basePace + getHamSelectionNumericValue(ham))
+}
+
+function simulateAnnualPhasePlan(scenario) {
+  const phases = scenario?.annualPhasePlan ?? []
+  let virtualCount = scenario?.virtualCount ?? state.filledCount
+  let virtualJuz = scenario?.virtualJuz ?? state.juz
+  let runningPace = scenario?.virtualPace ?? state.pace
+  let hasProgressPlan = false
+  const startVirtualJuz = virtualJuz
+  let isFirstPendingPhase = true
+
+  const normalizedPhases = phases.map((phase) => {
+    const ham = normalizeHamSelection(phase.ham)
+    const weeklyLessonCount = clampNumber(phase.weeklyLessonCount ?? 0, 0, scenario?.includeSundayStudy ? 7 : 6)
+    // For the first pending phase when juz > 0 (mid-boundary), don't increase pace
+    const paceAfter = phase.status === 'consumed'
+      ? phase.paceAfter
+      : (isFirstPendingPhase && startVirtualJuz > 0 && startVirtualJuz < COLUMNS
+        ? runningPace
+        : getAnnualPhasePaceAfter(runningPace, ham))
+
+    if (phase.status === 'pending' && weeklyLessonCount > 0) {
+      hasProgressPlan = true
+      isFirstPendingPhase = false
+
+      const remainingLessonsToBoundary = Math.max(COLUMNS - virtualJuz, 0) || COLUMNS
+
+      if (ham !== 'repeat') {
+        const remainingMainCells = Math.max(TOTAL_CELLS - virtualCount, 0)
+        const lessonsToCompletion = Math.ceil(remainingMainCells / getHamSelectionNumericValue(ham))
+        const lessonsApplied = Math.min(remainingLessonsToBoundary, lessonsToCompletion)
+        virtualCount = Math.min(virtualCount + (lessonsApplied * getHamSelectionNumericValue(ham)), TOTAL_CELLS)
+        virtualJuz = virtualCount >= TOTAL_CELLS
+          ? Math.min(virtualJuz + lessonsApplied, COLUMNS)
+          : 0
+      } else {
+        virtualJuz = 0
+      }
+
+      runningPace = paceAfter
+    } else if (phase.status === 'consumed') {
+      runningPace = phase.paceAfter
+      isFirstPendingPhase = true // reset for next pending phase after consumed
+    }
+
+    return {
+      ...phase,
+      ham,
+      weeklyLessonCount,
+      paceAfter,
+      status: phase.status === 'consumed' ? 'consumed' : 'pending',
+    }
+  })
+
+  return {
+    phases: normalizedPhases,
+    completesScenario: virtualCount >= TOTAL_CELLS,
+    hasProgressPlan,
+    finalVirtualCount: virtualCount,
+    finalVirtualJuz: virtualJuz,
+    finalVirtualPace: runningPace,
+  }
+}
+
+function syncAnnualPhasePlan(scenario) {
+  if (!scenario) {
+    return
+  }
+
+  const simulation = simulateAnnualPhasePlan(scenario)
+  scenario.annualPhasePlan = simulation.phases
+}
+
+function canAddAnnualPhase(scenario) {
+  if (!scenario || scenario.mode !== 'annual') {
+    return false
+  }
+
+  const ham = scenario.annualDraftHam
+  const weeklyLessonCount = scenario.annualDraftWeeklyLessonCount
+
+  if (ham == null || weeklyLessonCount == null) {
+    return false
+  }
+
+  if (weeklyLessonCount <= 0) {
+    return false
+  }
+
+  const basePace = getAnnualPlanLastPace(scenario)
+  const isFirstPendingPhase = scenario.annualPhasePlan.filter(p => p.status !== 'removed').length === 0
+  const isMidBoundary = (scenario.virtualJuz ?? state.juz) > 0 && (scenario.virtualJuz ?? state.juz) < COLUMNS
+
+  if (ham !== 'repeat' && !(isFirstPendingPhase && isMidBoundary)) {
+    const nextPace = getAnnualPhasePaceAfter(basePace, ham)
+    if (nextPace > ROWS) {
+      return false
+    }
+  }
+
+  const annualSimulation = simulateAnnualPhasePlan(scenario)
+  const remainingCount = Math.max(TOTAL_CELLS - annualSimulation.finalVirtualCount, 0)
+
+  if (remainingCount <= 0) {
+    return false
+  }
+
+  return ham === 'repeat' || ham <= getScenarioBoundarySelectableHamLimit({
+    virtualCount: annualSimulation.finalVirtualCount,
+    virtualPace: annualSimulation.finalVirtualPace,
+  })
+}
+
 function hasRemainingStudyWeekInWindow(scenario) {
   for (let weekIndex = scenario.activeWeekIndex + 1; weekIndex < scenario.weekCount; weekIndex += 1) {
     if (getScenarioWeekStudyCount(scenario, weekIndex) > 0) {
@@ -967,22 +1108,33 @@ function getScenarioAnimationProfile(scenario) {
 
     if (scenario.selectedWeeklyLessonCount === monthlyFullWeekCount) {
       return {
-        fillDelayStep: 12,
-        fillDuration: 170,
-        postFillHold: 70,
+        fillDelayStep: 44,
+        fillDuration: 340,
+        postFillHold: 120,
         waveDelayStep: 10,
-        waveDuration: 150,
+        waveDuration: 300,
         autoDelay: 110,
       }
     }
 
     return {
-      fillDelayStep: 18,
-      fillDuration: 220,
-      postFillHold: 90,
-      waveDelayStep: 12,
-      waveDuration: 180,
-      autoDelay: 160,
+      fillDelayStep: 44,
+      fillDuration: 340,
+      postFillHold: 150,
+      waveDelayStep: 10,
+      waveDuration: 300,
+      autoDelay: 140,
+    }
+  }
+
+  if (scenario?.mode === 'annual' && scenario?.annualAutoRunning) {
+    return {
+      fillDelayStep: 44,
+      fillDuration: 340,
+      postFillHold: 150,
+      waveDelayStep: 10,
+      waveDuration: 300,
+      autoDelay: 100,
     }
   }
 
@@ -1028,19 +1180,31 @@ function scheduleScenarioAutoRun() {
 
   if (
     !scenario
-    || scenario.mode !== 'monthly'
-    || !scenario.monthlyAutoRunning
-    || scenario.selectedWeeklyLessonCount == null
-    || scenario.selectedWeeklyLessonCount <= 0
     || scenario.modalOpen
     || scenario.locked
     || scenario.complete
     || scenario.filling
     || scenario.rolling
     || scenario.incoming
-    || getScenarioWeekRemainingStudyCount(scenario) <= 0
   ) {
     return
+  }
+
+  const isMonthlyAuto = scenario.mode === 'monthly' && scenario.monthlyAutoRunning
+  const isAnnualAuto = scenario.mode === 'annual' && scenario.annualAutoRunning
+
+  if (!isMonthlyAuto && !isAnnualAuto) {
+    return
+  }
+
+  if (isMonthlyAuto) {
+    if (
+      scenario.selectedWeeklyLessonCount == null
+      || scenario.selectedWeeklyLessonCount <= 0
+      || getScenarioWeekRemainingStudyCount(scenario) <= 0
+    ) {
+      return
+    }
   }
 
   if (scenarioAutoTimer) {
@@ -1050,17 +1214,13 @@ function scheduleScenarioAutoRun() {
   scenarioAutoTimer = window.setTimeout(() => {
     scenarioAutoTimer = null
 
-    if (
-      !state.scenario
-      || state.scenario.mode !== 'monthly'
-      || !state.scenario.monthlyAutoRunning
-      || state.scenario.selectedWeeklyLessonCount == null
-      || state.scenario.selectedWeeklyLessonCount <= 0
-    ) {
-      return
-    }
+    if (!state.scenario) return
 
-    applyScenarioChoice(state.scenario.selectedWeeklyLessonCount)
+    if (state.scenario.mode === 'monthly' && state.scenario.monthlyAutoRunning) {
+      applyScenarioChoice(state.scenario.selectedWeeklyLessonCount)
+    } else if (state.scenario.mode === 'annual' && state.scenario.annualAutoRunning) {
+      stepAnnualScenarioMonth()
+    }
   }, getScenarioAnimationProfile(scenario).autoDelay)
 }
 
@@ -1073,7 +1233,7 @@ function finishScenarioMonthTransition() {
   state.scenario.locked = false
   render()
 
-  if (state.scenario.mode === 'monthly') {
+  if (state.scenario.mode === 'monthly' || state.scenario.mode === 'annual') {
     scheduleScenarioAutoRun()
   }
 }
@@ -1090,6 +1250,8 @@ function startScenarioMonthTransition() {
   render()
 
   scenarioRollTimer = window.setTimeout(() => {
+    scenarioRollTimer = null
+
     if (!state.scenario) {
       return
     }
@@ -1099,15 +1261,101 @@ function startScenarioMonthTransition() {
     state.scenario.incoming = true
     render()
 
-    scenarioIncomingTimer = window.setTimeout(finishScenarioMonthTransition, monthWaveDuration)
+    scenarioIncomingTimer = window.setTimeout(() => {
+      scenarioIncomingTimer = null
+      finishScenarioMonthTransition()
+    }, monthWaveDuration)
   }, monthWaveDuration)
+}
+
+function finishScenarioReveal() {
+  if (!state.scenario) {
+    return
+  }
+
+  state.scenario.filling = false
+  state.scenario.animatedResultKeys = []
+
+  if (state.scenario.complete) {
+    commitScenarioToMain()
+    return
+  }
+
+  if (state.scenario.boundaryReached) {
+    state.preferredScenarioHam = null
+    state.scenario.boundaryReached = false
+    openScenarioModal(state.scenario.mode === 'monthly' ? 'monthly-config' : 'weekly-ham', true)
+    render()
+    return
+  }
+
+  const annualPaused = state.scenario.mode === 'annual' && !state.scenario.annualAutoRunning
+
+  if (hasRemainingStudyWeekInWindow(state.scenario) && !annualPaused) {
+    moveScenarioToNextStudyWeek(state.scenario)
+    state.scenario.locked = false
+    render()
+
+    if (state.scenario.mode === 'monthly' || (state.scenario.mode === 'annual' && state.scenario.annualAutoRunning)) {
+      scheduleScenarioAutoRun()
+    }
+    return
+  }
+
+  if (annualPaused) {
+    state.scenario.locked = false
+    render()
+    return
+  }
+
+  startScenarioMonthTransition()
+}
+
+function recoverScenarioProgressIfInterrupted() {
+  const scenario = state.scenario
+
+  if (!scenario) {
+    return
+  }
+
+  if (scenario.filling && !scenarioRevealTimer) {
+    finishScenarioReveal()
+    return
+  }
+
+  if (scenario.rolling && !scenarioRollTimer) {
+    moveScenarioToNextStudyWeek(scenario)
+    scenario.rolling = false
+    scenario.incoming = false
+    scenario.locked = false
+    render()
+
+    if (scenario.mode === 'monthly') {
+      scheduleScenarioAutoRun()
+    }
+    return
+  }
+
+  if (scenario.incoming && !scenarioIncomingTimer) {
+    finishScenarioMonthTransition()
+    return
+  }
+
+  if (scenario.previousEndDate && !scenarioDateTimer && !scenario.filling && !scenario.incoming) {
+    scenario.previousEndDate = null
+    render()
+  }
 }
 
 function createScenarioState() {
   const remainingPages = Math.max(TOTAL_CELLS - state.filledCount, 0)
   const isComplete = remainingPages === 0
   const startsAtBoundary = !isComplete && state.juz >= COLUMNS
-  const initialHam = state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1
+  const isZeroStart = state.pace === 0 && state.juz === 0 && state.filledCount === 0
+  const shouldPrefillZeroStartHam = state.mainDataApplied && isZeroStart
+  const initialHam = shouldPrefillZeroStartHam
+    ? normalizeHamSelection(state.preferredScenarioHam ?? state.inputHamCount)
+    : (state.inputJuz > 0 && state.inputJuz < COLUMNS ? state.inputHamCount : 1)
   const today = startOfDay(new Date())
   const monthView = getScenarioMonthView(today)
   const activeWeekIndex = monthView.visibleDays.find((day) => day.dateKey === toDateKey(today))?.weekIndex ?? 0
@@ -1155,9 +1403,12 @@ function createScenarioState() {
     selectedWeeklyLessonCount: initialLessonCount,
     monthlyAutoRunning: false,
     monthlyWeekPlan: null,
+    annualPhasePlan: [],
+    annualDraftHam: null,
+    annualDraftWeeklyLessonCount: null,
     modalStep: !isComplete ? 'weekly-ham' : null,
     modalBoundary: startsAtBoundary,
-    modalHamSelection: null,
+    modalHamSelection: shouldPrefillZeroStartHam ? initialHam : null,
     modalLessonSelection: null,
     includeSundayStudy: state.preferredScenarioSundayEnabled === true,
     includeHolidayStudy: state.preferredScenarioHolidayEnabled === true,
@@ -1219,6 +1470,9 @@ function createCompletedScenarioViewState() {
     selectedWeeklyLessonCount: snapshot.selectedWeeklyLessonCount,
     monthlyAutoRunning: false,
     monthlyWeekPlan: null,
+    annualPhasePlan: [],
+    annualDraftHam: null,
+    annualDraftWeeklyLessonCount: null,
     modalStep: null,
     modalBoundary: false,
     modalHamSelection: null,
@@ -1270,6 +1524,49 @@ function getScenarioWaveTotal(scenario, dayCount) {
   return profile.waveDuration + (profile.waveDelayStep * Math.max(dayCount - 1, 0))
 }
 
+function getScenarioMainMirrorAnimationConfig(scenario, cellCount = 1) {
+  const safeCellCount = Math.max(cellCount, 1)
+  const baseTotalDuration = MAIN_MIRROR_FILL_DURATION
+    + (MAIN_MIRROR_BASE_DELAY_STEP * Math.max(safeCellCount - 1, 0))
+    + MAIN_MIRROR_HOLD
+
+  if (!scenario?.hasStarted) {
+    return {
+      delayStep: MAIN_MIRROR_BASE_DELAY_STEP,
+      totalDuration: baseTotalDuration,
+    }
+  }
+
+  const profile = getScenarioAnimationProfile(scenario)
+  const revealDuration = getScenarioRevealDuration(scenario, 7)
+  const requiresMonthTransitionBuffer = (
+    (scenario.mode === 'monthly' || scenario.mode === 'annual')
+    && scenario.filling
+    && !scenario.complete
+    && !scenario.boundaryReached
+    && !hasRemainingStudyWeekInWindow(scenario)
+  )
+  const monthTransitionBuffer = requiresMonthTransitionBuffer
+    ? getScenarioWaveTotal(scenario, scenario.visibleDays.length) * 2
+    : 0
+  const targetDuration = Math.min(
+    Math.max(baseTotalDuration, revealDuration + profile.autoDelay + monthTransitionBuffer),
+    2400,
+  )
+  const computedDelayStep = safeCellCount > 1
+    ? Math.round((targetDuration - MAIN_MIRROR_FILL_DURATION - MAIN_MIRROR_HOLD) / (safeCellCount - 1))
+    : MAIN_MIRROR_BASE_DELAY_STEP
+  const delayStep = Math.max(MAIN_MIRROR_BASE_DELAY_STEP, Math.min(computedDelayStep, 260))
+
+  return {
+    delayStep,
+    totalDuration: Math.min(
+      MAIN_MIRROR_FILL_DURATION + (delayStep * Math.max(safeCellCount - 1, 0)) + MAIN_MIRROR_HOLD,
+      2400,
+    ),
+  }
+}
+
 function shuffleArray(values) {
   const array = [...values]
 
@@ -1299,6 +1596,8 @@ function setScenarioDateTransition(nextDate) {
   setForecastEndDate(nextDate)
 
   scenarioDateTimer = window.setTimeout(() => {
+    scenarioDateTimer = null
+
     if (!state.scenario) {
       return
     }
@@ -1314,13 +1613,12 @@ function setScenarioDateTransition(nextDate) {
 }
 
 function openScenarioView() {
-  if (!state.mainDataApplied) {
+  if (!canOpenScenarioView()) {
     state.view = 'main'
     render()
     return
   }
 
-  clearScenarioTimers()
   if (!state.scenario) {
     state.scenario = state.filledCount >= TOTAL_CELLS && state.completedScenarioView
       ? createCompletedScenarioViewState()
@@ -1328,6 +1626,7 @@ function openScenarioView() {
   }
   state.view = 'scenario'
   render()
+  recoverScenarioProgressIfInterrupted()
 
   if (state.scenario?.mode === 'monthly' && !state.scenario.modalOpen) {
     scheduleScenarioAutoRun()
@@ -1350,13 +1649,8 @@ function openHistoryView() {
   render()
 }
 
-function applyScenarioChoice(selectedGreenCount) {
-  const scenario = state.scenario
-
-  if (!scenario || scenario.complete || scenario.locked) {
-    return
-  }
-
+function processScenarioWeekChoice(scenario, selectedGreenCount, options = {}) {
+  const { skipReds = false, preserveOrder = false } = options
   const isRepeatMode = scenario.currentHam === 'repeat'
   const activeWeekDays = getActiveScenarioWeekDays(scenario)
   const { regularDays, optionalDays, orderedDays: visibleStudyDays } = getScenarioOrderedStudyDays(scenario)
@@ -1367,7 +1661,7 @@ function applyScenarioChoice(selectedGreenCount) {
   const boundaryLimitedWeek = boundarySelectableChoice < visibleStudyDays.length
     || remainingChoicesToCompletion < visibleStudyDays.length
   const prioritizedStudyDays = [
-    ...(boundaryLimitedWeek && actualGreens === maxSelectableChoice
+    ...((preserveOrder || (boundaryLimitedWeek && actualGreens === maxSelectableChoice))
       ? regularDays
       : shuffleArray(regularDays)),
     ...optionalDays,
@@ -1375,11 +1669,9 @@ function applyScenarioChoice(selectedGreenCount) {
   const selectedSuccessDateKeys = new Set(
     prioritizedStudyDays.slice(0, actualGreens).map((day) => day.dateKey),
   )
-  const beforeFilledCount = projectScenarioOutcome().filledCount
   const beforeVirtualJuz = scenario.virtualJuz
   const animatedResultKeys = []
   let boundaryReachedDuringWeek = false
-  let studyIndex = 0
 
   activeWeekDays.forEach((day) => {
     if (boundaryReachedDuringWeek) {
@@ -1411,6 +1703,10 @@ function applyScenarioChoice(selectedGreenCount) {
     }
 
     if (isScenarioOptionalStudyDay(scenario, day) && !selectedSuccessDateKeys.has(day.dateKey)) {
+      return
+    }
+
+    if (skipReds && !selectedSuccessDateKeys.has(day.dateKey)) {
       return
     }
 
@@ -1460,8 +1756,6 @@ function applyScenarioChoice(selectedGreenCount) {
         scenario.redsAdded += 1
       }
     }
-
-    studyIndex += 1
   })
 
   const virtualBoundaryReached = didCompleteScenarioJuz(beforeVirtualJuz, scenario.virtualJuz)
@@ -1474,6 +1768,21 @@ function applyScenarioChoice(selectedGreenCount) {
     scenario.repeatGrayCount = 0
   }
 
+  return {
+    animatedResultKeys,
+    virtualBoundaryReached,
+    activeWeekDayCount: activeWeekDays.length,
+  }
+}
+
+function applyScenarioChoice(selectedGreenCount) {
+  const scenario = state.scenario
+
+  if (!scenario || scenario.complete || scenario.locked) {
+    return
+  }
+
+  const weekResult = processScenarioWeekChoice(scenario, selectedGreenCount)
   const afterProjection = projectScenarioOutcome()
   const nextEndDate = estimateProjectedEndDate(
     Math.max(TOTAL_CELLS - afterProjection.filledCount, 0),
@@ -1485,55 +1794,27 @@ function applyScenarioChoice(selectedGreenCount) {
   if (scenario.complete) {
     setForecastEndDate(nextEndDate)
   }
-  scenario.animatedResultKeys = animatedResultKeys
+  scenario.animatedResultKeys = weekResult.animatedResultKeys
   scenario.locked = true
   scenario.filling = true
-  scenario.boundaryReached = virtualBoundaryReached
+  scenario.boundaryReached = weekResult.virtualBoundaryReached
   scenario.incoming = false
 
-  const revealDuration = getScenarioRevealDuration(scenario, activeWeekDays.length)
+  const revealDuration = getScenarioRevealDuration(scenario, weekResult.activeWeekDayCount)
 
   setScenarioDateTransition(nextEndDate)
   render()
 
   scenarioRevealTimer = window.setTimeout(() => {
-    if (!state.scenario) {
-      return
-    }
-
-    state.scenario.filling = false
-    state.scenario.animatedResultKeys = []
-    if (state.scenario.complete) {
-      commitScenarioToMain()
-      return
-    }
-
-    if (state.scenario.boundaryReached) {
-      state.preferredScenarioHam = null
-      state.scenario.boundaryReached = false
-      openScenarioModal(state.scenario.mode === 'monthly' ? 'monthly-config' : 'weekly-ham', true)
-      render()
-      return
-    }
-
-    if (hasRemainingStudyWeekInWindow(state.scenario)) {
-      moveScenarioToNextStudyWeek(state.scenario)
-      state.scenario.locked = false
-      render()
-
-      if (state.scenario.mode === 'monthly') {
-        scheduleScenarioAutoRun()
-      }
-      return
-    }
-
-    startScenarioMonthTransition()
+    scenarioRevealTimer = null
+    finishScenarioReveal()
   }, revealDuration)
 }
 
 function commitScenarioToMain(nextView = 'main') {
   clearScenarioTimers()
   const previousFilledCount = state.filledCount
+  const previousBaselineCount = state.baselineCount
   const previousDisplayEndDate = getProjectedEndDate(TOTAL_CELLS - previousFilledCount, state.spentStudyDays, state.closedStudyDays)
   const projected = projectScenarioOutcome()
   const displayEndDate = state.scenario?.completedEndDate
@@ -1544,11 +1825,14 @@ function commitScenarioToMain(nextView = 'main') {
     state.completedScenarioView = createCompletedScenarioSnapshot(state.scenario)
   }
 
+  state.mainDataApplied = true
   state.filledCount = projected.filledCount
   state.pace = projected.pace
   state.juz = projected.juz
-  state.baselineCount = projected.filledCount
-  state.committedMarks = []
+  state.inputPace = projected.pace
+  state.inputJuz = projected.juz
+  state.baselineCount = previousBaselineCount
+  state.committedMarks = projected.marks
   state.carryRedCount = projected.pendingRedCount
   state.spentStudyDays = projected.spentStudyDays
   state.closedStudyDays = projected.closedStudyDays
@@ -1559,6 +1843,23 @@ function commitScenarioToMain(nextView = 'main') {
   syncCompletionState(previousFilledCount, state.filledCount, displayEndDate)
   persistState()
   render()
+}
+
+function hasPendingScenarioTransfer() {
+  if (!state.scenario) {
+    return false
+  }
+
+  const projected = projectScenarioOutcome()
+
+  return (
+    projected.filledCount !== state.filledCount
+    || projected.pace !== state.pace
+    || projected.juz !== state.juz
+    || projected.pendingRedCount !== state.carryRedCount
+    || projected.spentStudyDays !== state.spentStudyDays
+    || projected.closedStudyDays !== state.closedStudyDays
+  )
 }
 
 function renderTabbedPanels(nextView) {
@@ -1706,6 +2007,203 @@ function clearScenarioTimers() {
   }
 }
 
+function addAnnualPhase() {
+  if (!state.scenario || state.scenario.mode !== 'annual') {
+    return
+  }
+
+  const ham = state.scenario.annualDraftHam
+  const weeklyLessonCount = state.scenario.annualDraftWeeklyLessonCount
+
+  if (ham == null || weeklyLessonCount == null) {
+    return
+  }
+
+  const isFirstPhase = state.scenario.annualPhasePlan.filter((p) => p.status !== 'removed').length === 0
+  const basePace = getAnnualPlanLastPace(state.scenario)
+  // For the first phase, ham is locked to current pace — so paceAfter stays the same (cüz not finished)
+  const paceAfter = isFirstPhase ? basePace : getAnnualPhasePaceAfter(basePace, ham)
+
+  state.scenario.annualPhasePlan.push({
+    id: createAnnualPhaseId(),
+    ham,
+    weeklyLessonCount,
+    paceAfter,
+    status: 'pending',
+  })
+  syncAnnualPhasePlan(state.scenario)
+  render()
+}
+
+function removeAnnualPhase() {
+  if (!state.scenario || state.scenario.mode !== 'annual') {
+    return
+  }
+
+  const lastPendingIndex = [...state.scenario.annualPhasePlan]
+    .map((phase, index) => ({ phase, index }))
+    .reverse()
+    .find(({ phase }) => phase.status === 'pending')
+    ?.index
+
+  if (lastPendingIndex == null) {
+    return
+  }
+
+  state.scenario.annualPhasePlan.splice(lastPendingIndex, 1)
+  syncAnnualPhasePlan(state.scenario)
+  render()
+}
+
+function canStartAnnualScenario(scenario = state.scenario) {
+  if (!scenario || scenario.mode !== 'annual') {
+    return false
+  }
+
+  const annualSimulation = simulateAnnualPhasePlan(scenario)
+  return annualSimulation.hasProgressPlan
+}
+
+function stepAnnualScenarioMonth() {
+  const scenario = state.scenario
+
+  if (!scenario || scenario.mode !== 'annual' || !scenario.annualAutoRunning || scenario.complete || scenario.locked) {
+    return
+  }
+
+  const startingMonthStartKey = scenario.monthStartKey
+  let monthAnimatedKeys = []
+  let phaseVirtualBoundaryReached = false
+
+  while (!scenario.complete && scenario.monthStartKey === startingMonthStartKey) {
+    const nextPhase = scenario.annualPhasePlan.find((phase) => phase.status === 'pending')
+
+    if (!nextPhase) {
+      break
+    }
+
+    const previousPhase = [...scenario.annualPhasePlan].reverse().find((phase) => phase.status === 'consumed')
+    const previousPhaseHam = previousPhase ? previousPhase.ham : null
+
+    if (previousPhaseHam === 'repeat' && nextPhase.ham !== 'repeat' && !scenario.annualBlackenFlagApplied) {
+      scenario.shouldBlackenNextLesson = true
+      scenario.annualBlackenFlagApplied = true
+    }
+
+    scenario.currentHam = nextPhase.ham
+    scenario.virtualPace = nextPhase.paceAfter
+    state.preferredScenarioHam = nextPhase.ham
+
+    if (getScenarioWeekRemainingStudyCount(scenario) <= 0) {
+      if (hasRemainingStudyWeekInWindow(scenario)) {
+        moveScenarioToNextStudyWeek(scenario)
+      } else {
+        break
+      }
+      continue
+    }
+
+    const weeklyChoice = Math.min(nextPhase.weeklyLessonCount, getScenarioWeekMaxChoice(scenario))
+
+    if (weeklyChoice <= 0) {
+      break
+    }
+
+    const weekResult = processScenarioWeekChoice(scenario, weeklyChoice)
+
+    phaseVirtualBoundaryReached = weekResult.virtualBoundaryReached
+    monthAnimatedKeys.push(...weekResult.animatedResultKeys)
+
+    const afterProjection = projectScenarioOutcome()
+    const nextEndDate = estimateProjectedEndDate(
+      Math.max(TOTAL_CELLS - afterProjection.filledCount, 0),
+      afterProjection.spentStudyDays,
+      afterProjection.closedStudyDays,
+    )
+
+    scenario.complete = afterProjection.filledCount >= TOTAL_CELLS
+    scenario.completedEndDate = scenario.complete ? nextEndDate : null
+    scenario.currentEndDate = nextEndDate
+    setForecastEndDate(nextEndDate)
+
+    if (phaseVirtualBoundaryReached) {
+      nextPhase.status = 'consumed'
+      scenario.annualBlackenFlagApplied = false
+      if (!scenario.complete) {
+        scenario.virtualJuz = 0
+      }
+    } else if (!scenario.complete) {
+      if (hasRemainingStudyWeekInWindow(scenario)) {
+        moveScenarioToNextStudyWeek(scenario)
+      } else {
+        break
+      }
+    }
+  }
+
+  if (monthAnimatedKeys.length > 0) {
+    scenario.animatedResultKeys = monthAnimatedKeys
+    scenario.filling = true
+    scenario.locked = true
+    scenario.boundaryReached = false
+    scenario.incoming = false
+
+    // If no pending phases remain, pause annual mode before reveal finishes
+    const hasMorePending = scenario.annualPhasePlan.some(p => p.status === 'pending')
+    if (!hasMorePending) {
+      scenario.annualAutoRunning = false
+      scenario.annualDraftHam = null
+      scenario.annualDraftWeeklyLessonCount = null
+      state.preferredScenarioMode = 'annual'
+      syncAnnualPhasePlan(scenario)
+    }
+
+    setScenarioDateTransition(scenario.currentEndDate)
+    render()
+
+    scenarioRevealTimer = window.setTimeout(() => {
+      scenarioRevealTimer = null
+      finishScenarioReveal()
+    }, getScenarioRevealDuration(scenario, 7))
+  } else if (!scenario.complete && scenario.annualPhasePlan.some(p => p.status === 'pending')) {
+    if (!hasRemainingStudyWeekInWindow(scenario)) {
+      startScenarioMonthTransition()
+    } else {
+      stepAnnualScenarioMonth()
+    }
+  } else {
+    scenario.annualAutoRunning = false
+    scenario.annualDraftHam = null
+    scenario.annualDraftWeeklyLessonCount = null
+    state.preferredScenarioMode = 'annual'
+    syncAnnualPhasePlan(scenario)
+    render()
+  }
+}
+
+function startAnnualScenario() {
+  const scenario = state.scenario
+
+  if (!scenario || scenario.mode !== 'annual' || !canStartAnnualScenario(scenario)) {
+    return
+  }
+
+  scenario.modalOpen = false
+  scenario.modalBoundary = false
+  scenario.modalStep = null
+  scenario.hasStarted = true
+  scenario.locked = false
+  scenario.filling = false
+  scenario.rolling = false
+  scenario.incoming = false
+  scenario.annualAutoRunning = true
+  scenario.annualBlackenFlagApplied = false
+
+  render()
+  
+  scheduleScenarioAutoRun()
+}
+
 function finalizeScenarioModalSelection() {
   if (!state.scenario) {
     return
@@ -1807,19 +2305,31 @@ function selectScenarioMode(nextMode) {
   state.scenario.modeSelected = true
   state.scenario.modalStep = nextMode === 'monthly'
     ? (shouldResetMonthlyBoundarySelection ? 'monthly-ham' : 'monthly-config')
-    : 'weekly-ham'
+    : (nextMode === 'annual' ? 'annual-config' : 'weekly-ham')
 
   if (isModeChanged && !state.scenario.hasStarted) {
     state.scenario.modalHamSelection = nextMode === 'monthly' ? state.scenario.currentHam : null
     state.scenario.modalLessonSelection = null
+    state.scenario.annualDraftHam = null
+    state.scenario.annualDraftWeeklyLessonCount = null
+    // Auto-select the current ham for the first annual phase
+    if (nextMode === 'annual' && state.inputHamCount > 0 && state.juz > 0) {
+      state.scenario.annualDraftHam = state.inputHamCount
+    }
   } else if (shouldResetMonthlyBoundarySelection) {
     state.scenario.modalHamSelection = null
     state.scenario.modalLessonSelection = null
   } else {
     const hamLocked = !state.scenario.modalBoundary && state.scenario.virtualJuz > 0
-    state.scenario.modalHamSelection = hamLocked
+    state.scenario.modalHamSelection = nextMode === 'annual'
+      ? null
+      : (hamLocked
       ? state.scenario.currentHam
-      : (state.scenario.modalHamSelection ?? state.scenario.currentHam)
+      : (state.scenario.modalHamSelection ?? state.scenario.currentHam))
+    // If switching back to annual and plan is still empty, re-lock to current ham
+    if (nextMode === 'annual' && state.scenario.annualPhasePlan.filter(p => p.status !== 'removed').length === 0 && state.inputHamCount > 0 && state.juz > 0) {
+      state.scenario.annualDraftHam = state.inputHamCount
+    }
     state.scenario.modalLessonSelection = nextMode === 'monthly' ? state.scenario.selectedWeeklyLessonCount : null
   }
 
@@ -1850,7 +2360,11 @@ function selectScenarioLessonCount(nextCount) {
     return
   }
 
-  state.scenario.modalLessonSelection = nextCount
+  if (state.scenario.mode === 'annual') {
+    state.scenario.annualDraftWeeklyLessonCount = nextCount
+  } else {
+    state.scenario.modalLessonSelection = nextCount
+  }
   render()
 }
 
@@ -1869,6 +2383,16 @@ function toggleScenarioAvailability(kind) {
       }
       if (state.scenario.modalLessonSelection != null) {
         state.scenario.modalLessonSelection = Math.min(state.scenario.modalLessonSelection, 6)
+      }
+      if (state.scenario.annualDraftWeeklyLessonCount != null) {
+        state.scenario.annualDraftWeeklyLessonCount = Math.min(state.scenario.annualDraftWeeklyLessonCount, 6)
+      }
+      if (state.scenario.annualPhasePlan.length > 0) {
+        state.scenario.annualPhasePlan = state.scenario.annualPhasePlan.map((phase) => ({
+          ...phase,
+          weeklyLessonCount: Math.min(phase.weeklyLessonCount, 6),
+        }))
+        syncAnnualPhasePlan(state.scenario)
       }
       if (state.preferredScenarioLessonCount != null) {
         state.preferredScenarioLessonCount = Math.min(state.preferredScenarioLessonCount, 6)
@@ -1890,6 +2414,12 @@ function applyHamSelection(nextHamLevel) {
     return
   }
 
+  if (state.scenario.mode === 'annual') {
+    state.scenario.annualDraftHam = nextHamLevel === 'repeat' ? 'repeat' : nextHamLevel
+    render()
+    return
+  }
+
   state.scenario.modalHamSelection = nextHamLevel === 'repeat' ? 'repeat' : nextHamLevel
 
   if (state.scenario.mode === 'monthly') {
@@ -1902,6 +2432,11 @@ function applyHamSelection(nextHamLevel) {
 
 function startScenarioFromModal() {
   if (!state.scenario) {
+    return
+  }
+
+  if (state.scenario.mode === 'annual') {
+    startAnnualScenario()
     return
   }
 
@@ -1966,9 +2501,13 @@ export {
   HAM_OPTIONS,
   WEEKDAY_LABELS,
   state,
+  addAnnualPhase,
   applyHamSelection,
   applyScenarioChoice,
+  canAddAnnualPhase,
+  canStartAnnualScenario,
   calculateFilledCount,
+  canOpenScenarioView,
   clampNumber,
   closeCompletionModal,
   commitScenarioToMain,
@@ -1987,6 +2526,7 @@ export {
   getHamSelectionNumericValue,
   getHistoryCurrentHamValue,
   getMarkMap,
+  hasPendingScenarioTransfer,
   getScenarioMonthView,
   getProjectedEndDate,
   getScenarioVisual,
@@ -1994,6 +2534,7 @@ export {
   getScenarioBoundaryHamLimit,
   getScenarioBoundarySelectableHamLimit,
   getScenarioChoiceHint,
+  getScenarioMainMirrorAnimationConfig,
   doesScenarioChoiceIncludeSunday,
   isScenarioPastStartDay,
   isNonStudyDay,
@@ -2011,10 +2552,12 @@ export {
   renderTabbedPanels,
   renderCompletionModal,
   renderScenarioDate,
+  removeAnnualPhase,
   reopenScenarioModal,
   navigateScenarioMonth,
   selectScenarioLessonCount,
   selectScenarioMode,
+  simulateAnnualPhasePlan,
   startScenarioFromModal,
   startOfMonth,
   startOfWeekMonday,

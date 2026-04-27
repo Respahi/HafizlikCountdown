@@ -24,7 +24,7 @@ export default function App() {
         <div className="app-topbar-group">
           <SegmentedTabs
             activeView={appState.view}
-            canOpenScenario={appState.mainDataApplied}
+            canOpenScenario
             canOpenHistory={appState.mainDataApplied}
           />
         </div>

@@ -2,10 +2,6 @@ import { renderTabbedPanels } from '../app-state.js'
 
 export function SegmentedTabs({ activeView, canOpenScenario, canOpenHistory }) {
   const handleSelect = (nextView) => {
-    if (nextView === 'scenario' && !canOpenScenario) {
-      return
-    }
-
     if (nextView === 'history' && !canOpenHistory) {
       return
     }
@@ -29,10 +25,9 @@ export function SegmentedTabs({ activeView, canOpenScenario, canOpenHistory }) {
         Hafızlık Tablosu
       </button>
       <button
-        className={`folder-tab ${activeView === 'scenario' ? 'folder-tab-active' : ''} ${!canOpenScenario ? 'folder-tab-disabled' : ''}`}
+        className={`folder-tab ${activeView === 'scenario' ? 'folder-tab-active' : ''}`}
         data-view-tab="scenario"
         type="button"
-        disabled={!canOpenScenario}
         onClick={() => handleSelect('scenario')}
       >
         Hayali Senaryo

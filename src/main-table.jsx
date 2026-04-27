@@ -13,14 +13,19 @@ import {
   getHamSelectionLabel,
   getHamSelectionNumericValue,
   getMarkMap,
-  getProjectedEndDate,
+  openScenarioView,
   persistState,
+  projectScenarioOutcome,
   render,
   setForecastEndDate,
   shiftHamSelection,
   syncCompletionState,
   state as appState,
 } from './app-state.js'
+
+const BASE_GRID_FILL_DELAY_STEP = 10
+const MIRROR_REVEAL_STEP_MS = 18
+const MIRROR_FILL_DURATION_MS = 560
 
 function shouldShowEmptyMainInputs(state) {
   return (
@@ -38,8 +43,35 @@ export function MainView({ state }) {
   const [invalidStepper, setInvalidStepper] = useState(null)
   const [paceText, setPaceText] = useState(shouldShowEmptyMainInputs(state) ? '' : String(state.inputPace ?? ''))
   const [juzText, setJuzText] = useState(shouldShowEmptyMainInputs(state) ? '' : String(state.inputJuz ?? ''))
+  const [mirrorVisibleFilledCount, setMirrorVisibleFilledCount] = useState(state.filledCount)
+  const [mirrorAnimationRange, setMirrorAnimationRange] = useState(null)
   const applyTimerRef = useRef(null)
   const stepperTimerRef = useRef(null)
+  const mirrorAnimationIntervalRef = useRef(null)
+  const mirrorAnimationClearTimerRef = useRef(null)
+  const mirrorAnimationTargetRef = useRef(state.filledCount)
+  const mirrorVisibleFilledCountRef = useRef(state.filledCount)
+  const liveProjection = state.scenario ? projectScenarioOutcome() : null
+  const shouldMirrorScenario = state.scenario?.hasStarted === true
+  const displayState = shouldMirrorScenario && liveProjection
+    ? {
+        filledCount: liveProjection.filledCount,
+        baselineCount: liveProjection.baselineCount,
+        committedMarks: liveProjection.marks,
+        pace: liveProjection.pace,
+        juz: liveProjection.juz,
+        spentStudyDays: liveProjection.spentStudyDays,
+        closedStudyDays: liveProjection.closedStudyDays,
+      }
+    : {
+        filledCount: state.filledCount,
+        baselineCount: state.baselineCount,
+        committedMarks: state.committedMarks,
+        pace: state.pace,
+        juz: state.juz,
+        spentStudyDays: state.spentStudyDays,
+        closedStudyDays: state.closedStudyDays,
+      }
 
   useEffect(() => {
     setPaceText(shouldShowEmptyMainInputs(state) ? '' : String(state.inputPace ?? ''))
@@ -48,6 +80,117 @@ export function MainView({ state }) {
   useEffect(() => {
     setJuzText(shouldShowEmptyMainInputs(state) ? '' : String(state.inputJuz ?? ''))
   }, [state.inputJuz, state.filledCount, state.baselineCount, state.pace, state.juz, state.inputPace])
+
+  useEffect(() => {
+    return () => {
+      if (applyTimerRef.current) {
+        window.clearTimeout(applyTimerRef.current)
+      }
+
+      if (stepperTimerRef.current) {
+        window.clearTimeout(stepperTimerRef.current)
+      }
+
+      if (mirrorAnimationIntervalRef.current) {
+        window.clearInterval(mirrorAnimationIntervalRef.current)
+      }
+
+      if (mirrorAnimationClearTimerRef.current) {
+        window.clearTimeout(mirrorAnimationClearTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!shouldMirrorScenario) {
+      mirrorAnimationTargetRef.current = state.filledCount
+      mirrorVisibleFilledCountRef.current = state.filledCount
+      setMirrorVisibleFilledCount(state.filledCount)
+      setMirrorAnimationRange(null)
+
+      if (mirrorAnimationIntervalRef.current) {
+        window.clearInterval(mirrorAnimationIntervalRef.current)
+        mirrorAnimationIntervalRef.current = null
+      }
+
+      if (mirrorAnimationClearTimerRef.current) {
+        window.clearTimeout(mirrorAnimationClearTimerRef.current)
+        mirrorAnimationClearTimerRef.current = null
+      }
+
+      return
+    }
+
+    const nextFilledCount = displayState.filledCount
+    mirrorAnimationTargetRef.current = nextFilledCount
+
+    if (nextFilledCount < mirrorVisibleFilledCountRef.current) {
+      mirrorVisibleFilledCountRef.current = nextFilledCount
+      setMirrorVisibleFilledCount(nextFilledCount)
+      setMirrorAnimationRange(null)
+    }
+
+    if (nextFilledCount <= mirrorVisibleFilledCountRef.current) {
+      return
+    }
+
+    if (mirrorAnimationIntervalRef.current) {
+      return
+    }
+
+    const batchStart = mirrorVisibleFilledCountRef.current + 1
+    setMirrorAnimationRange({
+      start: batchStart,
+      end: mirrorVisibleFilledCountRef.current,
+      delayStep: 0,
+    })
+
+    mirrorAnimationIntervalRef.current = window.setInterval(() => {
+      const previousVisibleCount = mirrorVisibleFilledCountRef.current
+      const nextVisibleCount = Math.min(previousVisibleCount + 1, mirrorAnimationTargetRef.current)
+
+      if (nextVisibleCount <= previousVisibleCount) {
+        window.clearInterval(mirrorAnimationIntervalRef.current)
+        mirrorAnimationIntervalRef.current = null
+        return
+      }
+
+      mirrorVisibleFilledCountRef.current = nextVisibleCount
+      setMirrorVisibleFilledCount(nextVisibleCount)
+      setMirrorAnimationRange({
+        start: batchStart,
+        end: nextVisibleCount,
+        delayStep: 0,
+      })
+
+      if (nextVisibleCount < mirrorAnimationTargetRef.current) {
+        return
+      }
+
+      window.clearInterval(mirrorAnimationIntervalRef.current)
+      mirrorAnimationIntervalRef.current = null
+
+      if (mirrorAnimationClearTimerRef.current) {
+        window.clearTimeout(mirrorAnimationClearTimerRef.current)
+      }
+
+      mirrorAnimationClearTimerRef.current = window.setTimeout(() => {
+        setMirrorAnimationRange((currentRange) => (
+          currentRange?.start === batchStart && currentRange?.end === nextVisibleCount
+            ? null
+            : currentRange
+        ))
+        mirrorAnimationClearTimerRef.current = null
+      }, MIRROR_FILL_DURATION_MS)
+    }, MIRROR_REVEAL_STEP_MS)
+
+    return () => {
+      if (mirrorAnimationIntervalRef.current) {
+        window.clearInterval(mirrorAnimationIntervalRef.current)
+        mirrorAnimationIntervalRef.current = null
+      }
+    }
+  }, [displayState.filledCount, shouldMirrorScenario, state.filledCount])
 
   const triggerApplyError = () => {
     if (applyTimerRef.current) {
@@ -77,12 +220,18 @@ export function MainView({ state }) {
     })
   }
 
-  const filledCount = state.filledCount
+  const filledCount = displayState.filledCount
   const remainingPages = TOTAL_CELLS - filledCount
   const percent = ((filledCount / TOTAL_CELLS) * 100).toFixed(1)
-  const estimate = estimateCompletion(remainingPages, state.spentStudyDays, state.closedStudyDays)
-  const displayEndDate = getProjectedEndDate(remainingPages, state.spentStudyDays, state.closedStudyDays)
-  const markMap = getMarkMap(state.committedMarks)
+  const estimate = estimateCompletion(remainingPages, displayState.spentStudyDays, displayState.closedStudyDays)
+  const displayEndDate = estimateProjectedEndDate(remainingPages, displayState.spentStudyDays, displayState.closedStudyDays)
+  const markMap = getMarkMap(displayState.committedMarks)
+  const visibleGridFilledCount = shouldMirrorScenario
+    ? Math.max(displayState.baselineCount, mirrorVisibleFilledCount)
+    : displayState.filledCount
+  const isEntryInputEmpty = paceText.trim() === '' && juzText.trim() === ''
+  const isDirectScenarioAction = isEntryInputEmpty
+  const actionButtonLabel = isDirectScenarioAction ? "Hayali Senaryo'ya Geç" : 'Tabloya Aktar'
 
   const handlePaceChange = (event) => {
     setPaceText(event.target.value.replace(/\D/g, '').slice(0, 2))
@@ -93,6 +242,10 @@ export function MainView({ state }) {
   }
 
   const handleShiftHam = (direction, kind) => {
+    if (isDirectScenarioAction) {
+      return
+    }
+
     const nextHamCount = shiftHamSelection(appState.inputHamCount, direction)
 
     if (nextHamCount === appState.inputHamCount) {
@@ -106,6 +259,11 @@ export function MainView({ state }) {
   }
 
   const handleApply = () => {
+    if (isDirectScenarioAction) {
+      openScenarioView()
+      return
+    }
+
     const rawPace = Number(paceText)
     const rawJuz = Number(juzText)
     const rawHamCount = state.inputHamCount
@@ -241,19 +399,32 @@ export function MainView({ state }) {
               {Array.from({ length: TOTAL_CELLS }, (_, index) => {
                 const order = getFillSequenceIndex(index)
                 const progressIndex = order + 1
-                const cellState = getCellState(progressIndex, state.baselineCount, markMap)
-                const animated = state.animate && progressIndex <= state.baselineCount
+                const cellState = progressIndex > visibleGridFilledCount
+                  ? {
+                      fillClass: '',
+                      labelValue: null,
+                      labelClass: '',
+                    }
+                  : getCellState(progressIndex, displayState.baselineCount, markMap)
+                const baselineAnimated = state.animate && !shouldMirrorScenario && progressIndex <= displayState.baselineCount
+                const mirrorAnimated = shouldMirrorScenario
+                  && mirrorAnimationRange
+                  && progressIndex === mirrorAnimationRange.end
+                const animationDelay = baselineAnimated
+                  ? order * BASE_GRID_FILL_DELAY_STEP
+                  : (mirrorAnimated ? 0 : null)
+                const delayedMirrorLabel = mirrorAnimated && cellState.labelValue != null
 
                 return (
                   <div
                     key={index}
                     className="cell"
-                    style={animated ? { '--fill-delay': `${order * 10}ms` } : undefined}
+                    style={animationDelay != null ? { '--fill-delay': `${animationDelay}ms` } : undefined}
                     title={`Satır ${ROWS - Math.floor(index / COLUMNS)}, Cüz ${(index % COLUMNS) + 1}`}
                   >
-                    <span className={`cell-fill ${cellState.fillClass}${animated ? ' cell-animated' : ''}`}></span>
+                    <span className={`cell-fill ${cellState.fillClass}${baselineAnimated || mirrorAnimated ? ' cell-animated' : ''}`}></span>
                     {cellState.labelValue ? (
-                      <span className={`cell-label ${cellState.labelClass}`}>{cellState.labelValue}</span>
+                      <span className={`cell-label ${cellState.labelClass}${delayedMirrorLabel ? ' cell-label-delayed' : ''}`}>{cellState.labelValue}</span>
                     ) : null}
                   </div>
                 )
@@ -296,18 +467,20 @@ export function MainView({ state }) {
 
           <label className="field">
             <span className="field-label-center">Kaç Ham Aldı</span>
-            <div className="stepper-field" aria-label="Kaç ham aldı">
+            <div className={`stepper-field ${isDirectScenarioAction ? 'stepper-field-disabled' : ''}`} aria-label="Kaç ham aldı">
               <button
                 className={`stepper-button ${invalidStepper === 'decrement' ? 'stepper-button-invalid' : ''}`}
                 type="button"
+                disabled={isDirectScenarioAction}
                 onClick={() => handleShiftHam(-1, 'decrement')}
               >
                 -
               </button>
-              <div className="stepper-value">{getHamSelectionLabel(state.inputHamCount)}</div>
+              <div className="stepper-value">{isDirectScenarioAction ? 'Senaryoda' : getHamSelectionLabel(state.inputHamCount)}</div>
               <button
                 className={`stepper-button ${invalidStepper === 'increment' ? 'stepper-button-invalid' : ''}`}
                 type="button"
+                disabled={isDirectScenarioAction}
                 onClick={() => handleShiftHam(1, 'increment')}
               >
                 +
@@ -316,11 +489,11 @@ export function MainView({ state }) {
           </label>
 
           <button
-            className={`apply-button ${invalidApply ? 'apply-button-invalid' : ''}`}
+            className={`apply-button ${isDirectScenarioAction ? 'apply-button-scenario' : 'apply-button-main'} ${invalidApply ? 'apply-button-invalid' : ''}`}
             type="button"
             onClick={handleApply}
           >
-            Tabloya Aktar
+            {actionButtonLabel}
           </button>
         </div>
 

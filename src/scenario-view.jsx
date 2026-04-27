@@ -1,18 +1,23 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 import {
   TOTAL_CELLS,
   WEEKDAY_LABELS,
   HAM_OPTIONS,
+  addAnnualPhase,
   state as appState,
   applyHamSelection,
   applyScenarioChoice,
+  canAddAnnualPhase,
+  canStartAnnualScenario,
+  commitScenarioToMain,
   createScenarioClosedEntry,
   createScenarioState,
   estimateProjectedEndDate,
   formatMonthYear,
   getCellState,
   getFillSequenceIndex,
+  hasPendingScenarioTransfer,
   getMarkMap,
   getScenarioBoundarySelectableHamLimit,
   getScenarioChoiceHint,
@@ -24,8 +29,10 @@ import {
   parseDateKey,
   projectScenarioOutcome,
   renderScenarioDate,
+  removeAnnualPhase,
   selectScenarioLessonCount,
   selectScenarioMode,
+  simulateAnnualPhasePlan,
   startScenarioFromModal,
   toggleScenarioAvailability,
 } from './app-state.js'
@@ -42,6 +49,7 @@ function getScenarioChoiceBackground(choice, maxSelectableChoice) {
 
 export function ScenarioView({ state }) {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const annualPhaseListRef = useRef(null)
   const scenario = state.scenario ?? createScenarioState()
   appState.scenario = scenario
 
@@ -52,9 +60,18 @@ export function ScenarioView({ state }) {
     preview.closedStudyDays,
   )
   const previewMarkMap = getMarkMap(preview.marks)
+  const hasPendingMainTransfer = hasPendingScenarioTransfer()
+  const annualPlanSimulation = simulateAnnualPhasePlan(scenario)
+  const annualRemainingScenario = {
+    virtualCount: annualPlanSimulation.finalVirtualCount,
+    virtualPace: annualPlanSimulation.finalVirtualPace,
+  }
   const maxSelectableChoice = getScenarioWeekMaxChoice(scenario)
   const boundaryHamLimit = getScenarioBoundarySelectableHamLimit(scenario)
-  const availableHamOptions = HAM_OPTIONS.filter((option) => !scenario.modalBoundary || option <= boundaryHamLimit)
+  const annualBoundaryHamLimit = getScenarioBoundarySelectableHamLimit(annualRemainingScenario)
+  const availableHamOptions = scenario.mode === 'annual'
+    ? HAM_OPTIONS.filter((option) => annualPlanSimulation.finalVirtualCount < TOTAL_CELLS && option <= annualBoundaryHamLimit)
+    : HAM_OPTIONS.filter((option) => !scenario.modalBoundary || option <= boundaryHamLimit)
   const animatedResultKeySet = new Set(scenario.animatedResultKeys)
   const animatedOrderMap = new Map(scenario.animatedResultKeys.map((dateKey, index) => [dateKey, index]))
   const scenarioEntryMap = new Map((scenario.archivedEntries ?? scenario.entries).map((entry) => [entry.dateKey, entry]))
@@ -68,52 +85,68 @@ export function ScenarioView({ state }) {
   const canGoToNextMonth = displayMonthStartKey < scenario.monthStartKey
   const isWeeklyMode = scenario.mode === 'weekly'
   const isMonthlyMode = scenario.mode === 'monthly'
+  const isAnnualMode = scenario.mode === 'annual'
+  const isFirstAnnualPhase = isAnnualMode && scenario.annualPhasePlan.filter(p => p.status !== 'removed').length === 0
+  const annualFixedHam = isFirstAnnualPhase && state.inputHamCount > 0 && state.juz > 0 ? state.inputHamCount : null
   const isInitialSetup = !scenario.hasStarted && !scenario.complete
   const isBoundarySetup = scenario.modalBoundary
   const isScenarioRunning = scenario.hasStarted && !scenario.modalBoundary && !scenario.complete
   const isMonthlyPausedForSetup = isMonthlyMode && isScenarioRunning && !scenario.monthlyAutoRunning
-  const manualChoiceDisabled = scenario.complete || scenario.locked || isMonthlyMode || !isViewingCurrentMonth
-  const hamLocked = !scenario.modalBoundary && scenario.virtualJuz > 0
+  const manualChoiceDisabled = scenario.complete || scenario.locked || isMonthlyMode || isAnnualMode || !isViewingCurrentMonth
+  const hamLocked = !isAnnualMode && !scenario.modalBoundary && scenario.virtualJuz > 0
   const weeklyChoiceButtonMax = scenario.includeSundayStudy ? 7 : 6
   const monthlyLessonOptionMax = scenario.includeSundayStudy ? 7 : 6
-  const shouldRequireExplicitHamSelection = (isWeeklyMode && isInitialSetup) || (isMonthlyMode && isBoundarySetup)
-  const selectedHamValue = hamLocked
+  const shouldRequireExplicitHamSelection = (isWeeklyMode && isInitialSetup) || (isMonthlyMode && (isInitialSetup || isBoundarySetup))
+  const selectedHamValue = isAnnualMode
+    ? scenario.annualDraftHam
+    : (hamLocked
     ? scenario.currentHam
-    : (shouldRequireExplicitHamSelection ? scenario.modalHamSelection : (scenario.modalHamSelection ?? scenario.currentHam))
+    : (shouldRequireExplicitHamSelection ? scenario.modalHamSelection : (scenario.modalHamSelection ?? scenario.currentHam)))
   const selectedLessonCount = isMonthlyMode && isBoundarySetup
     ? scenario.modalLessonSelection
     : (scenario.modalLessonSelection ?? scenario.selectedWeeklyLessonCount)
-  const canStartScenario = isWeeklyMode
+  const annualDraftLessonCount = scenario.annualDraftWeeklyLessonCount
+  const canStartScenario = isAnnualMode
+    ? canStartAnnualScenario(scenario)
+    : (isWeeklyMode
     ? selectedHamValue != null
-    : (selectedLessonCount != null && selectedHamValue != null)
+    : (selectedLessonCount != null && selectedHamValue != null))
   const setupPanelDisabled = isScenarioRunning && isMonthlyMode && scenario.monthlyAutoRunning
   const shouldShowSetupPanel = true
   const spotlightModeCard = !scenario.modeSelected
   const card1Interactive = !setupPanelDisabled && !scenario.complete && (isInitialSetup || isBoundarySetup || isScenarioRunning)
   const card2Interactive = !setupPanelDisabled && !scenario.complete && scenario.modeSelected && (
     (isWeeklyMode && (isInitialSetup || isBoundarySetup))
-    || (isMonthlyMode && isBoundarySetup)
+    || (isMonthlyMode && (isInitialSetup || isBoundarySetup))
+    || isAnnualMode
   )
   const spotlightHamCard = card2Interactive && (
     (isWeeklyMode && isInitialSetup && scenario.modalHamSelection == null)
-    || (isBoundarySetup && scenario.modalHamSelection == null)
+    || (isMonthlyMode && (isInitialSetup || isBoundarySetup) && scenario.modalHamSelection == null)
+    || (isAnnualMode && scenario.annualDraftHam == null)
   )
-  const showCard3 = isWeeklyMode || (isMonthlyMode && (isInitialSetup || isMonthlyPausedForSetup || !isBoundarySetup || scenario.modalHamSelection != null))
+  const showCard3 = isAnnualMode || isWeeklyMode || (isMonthlyMode && (isInitialSetup || isMonthlyPausedForSetup || !isBoundarySetup || scenario.modalHamSelection != null))
   const card3Interactive = !setupPanelDisabled && !scenario.complete && (
     (isWeeklyMode && isScenarioRunning)
     || (isMonthlyMode && scenario.modeSelected && (isInitialSetup || isMonthlyPausedForSetup || (isBoundarySetup && scenario.modalHamSelection != null)))
+    || (isAnnualMode && scenario.modeSelected)
   )
   const spotlightLessonCard = card3Interactive && (
     (isWeeklyMode && isScenarioRunning)
     || (isMonthlyMode && selectedLessonCount == null)
+    || (isAnnualMode && annualDraftLessonCount == null)
   )
   const showStartAction = !scenario.complete && (
-    isWeeklyMode
+    isAnnualMode
+      ? (scenario.modeSelected && scenario.annualPhasePlan.length > 0)
+      : (isWeeklyMode
       ? (scenario.modeSelected && selectedHamValue != null && (isInitialSetup || isBoundarySetup))
-      : (scenario.modeSelected && selectedLessonCount != null && (isInitialSetup || isBoundarySetup || isMonthlyPausedForSetup))
+      : (scenario.modeSelected && selectedLessonCount != null && (isInitialSetup || isBoundarySetup || isMonthlyPausedForSetup)))
   )
   const showWeeklyStartOverlay = isWeeklyMode && showStartAction
   const showMonthlyStartCard = isMonthlyMode && showStartAction
+  const showAnnualStartCard = isAnnualMode && showStartAction
+  const annualCanAddPhase = canAddAnnualPhase(scenario)
   const startButtonDisabled = (
     !canStartScenario
     || setupPanelDisabled
@@ -123,9 +156,40 @@ export function ScenarioView({ state }) {
     || scenario.monthlyAutoRunning
     || scenario.locked
   )
+  const commitButtonDisabled = (
+    !hasPendingMainTransfer
+    || scenario.filling
+    || scenario.rolling
+    || scenario.incoming
+  )
   const isWeeklyActive = scenario.modeSelected && isWeeklyMode
   const isMonthlyActive = scenario.modeSelected && isMonthlyMode
+  const isAnnualActive = scenario.modeSelected && isAnnualMode
   const showSettingsModal = settingsModalOpen && !setupPanelDisabled && !scenario.complete
+
+  const annualConsumedCount = isAnnualMode ? scenario.annualPhasePlan.filter(p => p.status === 'consumed').length : 0
+
+  useEffect(() => {
+    if (!isAnnualMode || !annualPhaseListRef.current) return
+
+    const container = annualPhaseListRef.current
+    const rows = container.querySelectorAll('.scenario-annual-phase-row')
+
+    if (rows.length === 0) return
+
+    if (scenario.annualAutoRunning) {
+      const activeIndex = Math.min(annualConsumedCount, rows.length - 1)
+      const targetRow = rows[activeIndex]
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    } else {
+      const targetRow = rows[rows.length - 1]
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [scenario.annualPhasePlan.length, scenario.annualAutoRunning, annualConsumedCount, isAnnualMode])
 
   const setupPanel = (
     <aside className="scenario-setup-column">
@@ -135,7 +199,7 @@ export function ScenarioView({ state }) {
             <fieldset className="scenario-control-card-fieldset" disabled={!card1Interactive}>
               <div className="scenario-control-card-head">
                 <div className="scenario-control-card-topline">
-                  <h2 className="scenario-control-card-title">1. Haftalık-Aylık Mod</h2>
+                  <h2 className="scenario-control-card-title">1. Mod</h2>
                   <button
                     className="scenario-settings-button"
                     type="button"
@@ -168,6 +232,14 @@ export function ScenarioView({ state }) {
                 >
                   Aylık
                 </button>
+                <button
+                  className={`scenario-option scenario-mode-option ${isAnnualActive ? 'scenario-mode-option-active' : ''}`}
+                  data-scenario-mode="annual"
+                  type="button"
+                  onClick={() => selectScenarioMode('annual')}
+                >
+                  Yıllık
+                </button>
               </div>
             </fieldset>
           </section>
@@ -185,22 +257,24 @@ export function ScenarioView({ state }) {
                       className={`scenario-option scenario-modal-option scenario-monthly-lesson-option scenario-ham-choice-option ${selectedHamValue === option ? 'scenario-modal-option-active' : ''}`}
                       data-modal-ham={option}
                       type="button"
-                      disabled={!card2Interactive || hamLocked}
+                      disabled={!card2Interactive || hamLocked || (annualFixedHam != null && option !== annualFixedHam)}
                       onClick={() => applyHamSelection(option)}
                     >
                       {option}
                     </button>
                   ))}
                 </div>
-                <button
-                  className={`scenario-option scenario-modal-option scenario-modal-option-repeat scenario-ham-choice-option ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
-                  data-modal-ham="repeat"
-                  type="button"
-                  disabled={!card2Interactive || hamLocked}
-                  onClick={() => applyHamSelection('repeat')}
-                >
-                  Tekrar
-                </button>
+                {isAnnualMode || !scenario.modalBoundary ? (
+                  <button
+                    className={`scenario-option scenario-modal-option scenario-modal-option-repeat scenario-ham-choice-option ${selectedHamValue === 'repeat' ? 'scenario-modal-option-active' : ''}`}
+                    data-modal-ham="repeat"
+                    type="button"
+                    disabled={!card2Interactive || hamLocked || annualFixedHam != null || (isAnnualMode && annualPlanSimulation.finalVirtualCount >= TOTAL_CELLS)}
+                    onClick={() => applyHamSelection('repeat')}
+                  >
+                    Tekrar
+                  </button>
+                ) : null}
               </div>
             </fieldset>
           </section>
@@ -244,7 +318,7 @@ export function ScenarioView({ state }) {
                         {Array.from({ length: monthlyLessonOptionMax + 1 }, (_, index) => (
                           <button
                             key={index}
-                            className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${selectedLessonCount === index ? 'scenario-modal-option-active' : ''}`}
+                            className={`scenario-option scenario-modal-option scenario-monthly-lesson-option ${(isAnnualMode ? annualDraftLessonCount : selectedLessonCount) === index ? 'scenario-modal-option-active' : ''}`}
                             data-modal-lesson={index}
                             type="button"
                             disabled={!card3Interactive}
@@ -255,6 +329,18 @@ export function ScenarioView({ state }) {
                         ))}
                       </div>
                     )}
+                    {isAnnualMode ? (
+                      <div className="scenario-annual-actions">
+                        <button
+                          className="scenario-button scenario-annual-add-button"
+                          type="button"
+                          disabled={!annualCanAddPhase}
+                          onClick={addAnnualPhase}
+                        >
+                          Ham Ekle
+                        </button>
+                      </div>
+                    ) : null}
                   </fieldset>
                 </section>
               ) : null}
@@ -275,6 +361,62 @@ export function ScenarioView({ state }) {
           ) : null}
 
           {showMonthlyStartCard ? (
+            <section className="scenario-control-card scenario-control-card-active scenario-control-card-action-card">
+              <button
+                className="scenario-button scenario-modal-start-button"
+                type="button"
+                disabled={startButtonDisabled}
+                onClick={startScenarioFromModal}
+              >
+                {scenario.hasStarted ? 'Senaryoya Devam' : 'Senaryoyu Başlat'}
+              </button>
+            </section>
+          ) : null}
+          {isAnnualMode ? (
+            <section className={`scenario-control-card ${scenario.modeSelected ? 'scenario-control-card-active' : 'scenario-control-card-inactive'}`}>
+              <div className="scenario-control-card-head">
+                <h2 className="scenario-control-card-title">4. Yıllık Faz Planı</h2>
+              </div>
+              <div 
+                ref={annualPhaseListRef} 
+                className={`scenario-annual-phase-list ${scenario.annualAutoRunning ? 'scenario-annual-phase-list-running' : ''}`}
+              >
+                {scenario.annualPhasePlan.length === 0 ? (
+                  <p className="scenario-annual-phase-empty">Ham ve haftalık ders seçip plan oluşturmaya başla.</p>
+                ) : (
+                  scenario.annualPhasePlan.map((phase, index) => (
+                    <div
+                      key={phase.id}
+                      className={`scenario-annual-phase-row ${phase.status === 'consumed' ? 'scenario-annual-phase-row-consumed' : ''}`}
+                    >
+                      <div className="scenario-annual-phase-meta">
+                        <span className="scenario-annual-phase-order">{index + 1}</span>
+                        <span className="scenario-annual-phase-text">
+                          {phase.ham === 'repeat' ? 'Tekrar' : `${phase.ham} Ham`} / {phase.weeklyLessonCount} Ders
+                        </span>
+                      </div>
+                      <div className="scenario-annual-phase-actions">
+                        <span className="scenario-annual-phase-pace">{phase.paceAfter}</span>
+                        {phase.status === 'pending' && index === scenario.annualPhasePlan.length - 1 ? (
+                          <button
+                            className="scenario-annual-phase-remove"
+                            type="button"
+                            onClick={removeAnnualPhase}
+                            aria-label="Son fazı sil"
+                          >
+                            ×
+                          </button>
+                        ) : (
+                          <span className="scenario-annual-phase-remove-placeholder"></span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          ) : null}
+          {showAnnualStartCard ? (
             <section className="scenario-control-card scenario-control-card-active scenario-control-card-action-card">
               <button
                 className="scenario-button scenario-modal-start-button"
@@ -396,22 +538,22 @@ export function ScenarioView({ state }) {
                     const isPastWeek = isViewingCurrentMonth ? day.weekIndex < scenario.activeWeekIndex : displayMonthStartKey < scenario.monthStartKey
                     const isActiveWeek = isViewingCurrentMonth && day.weekIndex === scenario.activeWeekIndex
                     const isFutureWeek = isViewingCurrentMonth && day.weekIndex > scenario.activeWeekIndex
-                    const isMonthlyMode = scenario.mode === 'monthly'
+                    const isGridAutoAnimating = scenario.mode === 'monthly' || scenario.mode === 'annual'
                     const fillClass = scenario.filling
-                      && isActiveWeek
+                      && (!isGridAutoAnimating ? isActiveWeek : true)
                       && result
                       && result.type !== 'sunday'
                       && result.type !== 'holiday'
                       && day.isCurrentMonth
                       && animatedResultKeySet.has(day.dateKey)
-                      ? (isMonthlyMode ? 'scenario-tile-fill-in-monthly' : 'scenario-tile-fill-in')
+                      ? (isGridAutoAnimating ? 'scenario-tile-fill-in-monthly' : 'scenario-tile-fill-in')
                       : ''
                     const waveClass = scenario.rolling
-                      ? (isMonthlyMode ? 'scenario-tile-wave-out-monthly' : 'scenario-tile-wave-out')
-                      : (scenario.incoming ? (isMonthlyMode ? 'scenario-tile-wave-in-monthly' : 'scenario-tile-wave-in') : '')
-                    const fillOrder = animatedOrderMap.get(day.dateKey) ?? day.weekdayIndex
+                      ? (isGridAutoAnimating ? 'scenario-tile-wave-out-monthly' : 'scenario-tile-wave-out')
+                      : (scenario.incoming ? (isGridAutoAnimating ? 'scenario-tile-wave-in-monthly' : 'scenario-tile-wave-in') : '')
+                    const fillOrder = isGridAutoAnimating ? day.weekdayIndex : (animatedOrderMap.get(day.dateKey) ?? day.weekdayIndex)
                     const mutedFillClass = isOutsideMonth
-                      ? (isPastAdjacentDay ? 'scenario-tile-fill-muted' : 'scenario-tile-fill-adjacent')
+                      ? (!visual.fillClass ? (isPastAdjacentDay ? 'scenario-tile-fill-muted' : 'scenario-tile-fill-adjacent') : '')
                       : (!visual.fillClass && (isPastWeek || isFutureWeek || isPastStartDay)
                           ? `scenario-tile-fill-${isFutureWeek ? 'locked' : 'muted'}`
                           : '')
@@ -495,6 +637,19 @@ export function ScenarioView({ state }) {
               })}
             </div>
           </div>
+
+          {hasPendingMainTransfer ? (
+            <div className="control-card scenario-commit-card">
+              <button
+                className="scenario-button scenario-commit-button"
+                type="button"
+                disabled={commitButtonDisabled}
+                onClick={() => commitScenarioToMain()}
+              >
+                Ana Tabloya Aktar
+              </button>
+            </div>
+          ) : null}
         </aside>
       </main>
     </div>
