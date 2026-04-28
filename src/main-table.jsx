@@ -25,7 +25,6 @@ import {
 
 const BASE_GRID_FILL_DELAY_STEP = 10
 const MIRROR_REVEAL_STEP_MS = 18
-const MIRROR_FILL_DURATION_MS = 560
 
 function shouldShowEmptyMainInputs(state) {
   return (
@@ -44,11 +43,9 @@ export function MainView({ state }) {
   const [paceText, setPaceText] = useState(shouldShowEmptyMainInputs(state) ? '' : String(state.inputPace ?? ''))
   const [juzText, setJuzText] = useState(shouldShowEmptyMainInputs(state) ? '' : String(state.inputJuz ?? ''))
   const [mirrorVisibleFilledCount, setMirrorVisibleFilledCount] = useState(state.filledCount)
-  const [mirrorAnimationRange, setMirrorAnimationRange] = useState(null)
   const applyTimerRef = useRef(null)
   const stepperTimerRef = useRef(null)
   const mirrorAnimationIntervalRef = useRef(null)
-  const mirrorAnimationClearTimerRef = useRef(null)
   const mirrorAnimationTargetRef = useRef(state.filledCount)
   const mirrorVisibleFilledCountRef = useRef(state.filledCount)
   const liveProjection = state.scenario ? projectScenarioOutcome() : null
@@ -94,10 +91,6 @@ export function MainView({ state }) {
       if (mirrorAnimationIntervalRef.current) {
         window.clearInterval(mirrorAnimationIntervalRef.current)
       }
-
-      if (mirrorAnimationClearTimerRef.current) {
-        window.clearTimeout(mirrorAnimationClearTimerRef.current)
-      }
     }
   }, [])
 
@@ -106,16 +99,10 @@ export function MainView({ state }) {
       mirrorAnimationTargetRef.current = state.filledCount
       mirrorVisibleFilledCountRef.current = state.filledCount
       setMirrorVisibleFilledCount(state.filledCount)
-      setMirrorAnimationRange(null)
 
       if (mirrorAnimationIntervalRef.current) {
         window.clearInterval(mirrorAnimationIntervalRef.current)
         mirrorAnimationIntervalRef.current = null
-      }
-
-      if (mirrorAnimationClearTimerRef.current) {
-        window.clearTimeout(mirrorAnimationClearTimerRef.current)
-        mirrorAnimationClearTimerRef.current = null
       }
 
       return
@@ -127,7 +114,6 @@ export function MainView({ state }) {
     if (nextFilledCount < mirrorVisibleFilledCountRef.current) {
       mirrorVisibleFilledCountRef.current = nextFilledCount
       setMirrorVisibleFilledCount(nextFilledCount)
-      setMirrorAnimationRange(null)
     }
 
     if (nextFilledCount <= mirrorVisibleFilledCountRef.current) {
@@ -137,13 +123,6 @@ export function MainView({ state }) {
     if (mirrorAnimationIntervalRef.current) {
       return
     }
-
-    const batchStart = mirrorVisibleFilledCountRef.current + 1
-    setMirrorAnimationRange({
-      start: batchStart,
-      end: mirrorVisibleFilledCountRef.current,
-      delayStep: 0,
-    })
 
     mirrorAnimationIntervalRef.current = window.setInterval(() => {
       const previousVisibleCount = mirrorVisibleFilledCountRef.current
@@ -157,11 +136,6 @@ export function MainView({ state }) {
 
       mirrorVisibleFilledCountRef.current = nextVisibleCount
       setMirrorVisibleFilledCount(nextVisibleCount)
-      setMirrorAnimationRange({
-        start: batchStart,
-        end: nextVisibleCount,
-        delayStep: 0,
-      })
 
       if (nextVisibleCount < mirrorAnimationTargetRef.current) {
         return
@@ -169,19 +143,6 @@ export function MainView({ state }) {
 
       window.clearInterval(mirrorAnimationIntervalRef.current)
       mirrorAnimationIntervalRef.current = null
-
-      if (mirrorAnimationClearTimerRef.current) {
-        window.clearTimeout(mirrorAnimationClearTimerRef.current)
-      }
-
-      mirrorAnimationClearTimerRef.current = window.setTimeout(() => {
-        setMirrorAnimationRange((currentRange) => (
-          currentRange?.start === batchStart && currentRange?.end === nextVisibleCount
-            ? null
-            : currentRange
-        ))
-        mirrorAnimationClearTimerRef.current = null
-      }, MIRROR_FILL_DURATION_MS)
     }, MIRROR_REVEAL_STEP_MS)
 
     return () => {
@@ -407,14 +368,9 @@ export function MainView({ state }) {
                     }
                   : getCellState(progressIndex, displayState.baselineCount, markMap)
                 const baselineAnimated = state.animate && !shouldMirrorScenario && progressIndex <= displayState.baselineCount
-                const mirrorAnimated = shouldMirrorScenario
-                  && mirrorAnimationRange
-                  && progressIndex === mirrorAnimationRange.end
                 const animationDelay = baselineAnimated
                   ? order * BASE_GRID_FILL_DELAY_STEP
-                  : (mirrorAnimated ? 0 : null)
-                const delayedMirrorLabel = mirrorAnimated && cellState.labelValue != null
-
+                  : null
                 return (
                   <div
                     key={index}
@@ -422,9 +378,9 @@ export function MainView({ state }) {
                     style={animationDelay != null ? { '--fill-delay': `${animationDelay}ms` } : undefined}
                     title={`Satır ${ROWS - Math.floor(index / COLUMNS)}, Cüz ${(index % COLUMNS) + 1}`}
                   >
-                    <span className={`cell-fill ${cellState.fillClass}${baselineAnimated || mirrorAnimated ? ' cell-animated' : ''}`}></span>
+                    <span className={`cell-fill ${cellState.fillClass}${baselineAnimated ? ' cell-animated' : ''}`}></span>
                     {cellState.labelValue ? (
-                      <span className={`cell-label ${cellState.labelClass}${delayedMirrorLabel ? ' cell-label-delayed' : ''}`}>{cellState.labelValue}</span>
+                      <span className={`cell-label ${cellState.labelClass}`}>{cellState.labelValue}</span>
                     ) : null}
                   </div>
                 )
