@@ -1,7 +1,7 @@
 # Hafızlık Countdown
 
 <p align="center">
-  <img src="src/assets/hero.png" alt="Hafızlık Countdown" width="260">
+  <img src="public/repo-mark.svg" alt="Hafızlık Countdown" width="520">
 </p>
 
 <p align="center">
