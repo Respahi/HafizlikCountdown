@@ -4048,7 +4048,7 @@ h2 {
 
 /* Sidebar */
 .sc-sidebar {
-  width: 152px;
+  width: 168px;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -4088,20 +4088,33 @@ h2 {
   margin-top: 3px;
 }
 
-.sc-stat-frac {
-  font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1;
+/* Kesirli gösterge kartı */
+.sc-fraction-card {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 14px 10px;
 }
 
-.sc-frac-n {
-  font-size: 1.4rem;
+.sc-fraction-part {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.sc-fraction-big {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1;
   color: var(--text);
 }
 
-.sc-frac-d {
-  font-size: 0.9rem;
-  color: var(--muted);
+.sc-fraction-line {
+  width: min(120px, 100%);
+  height: 2px;
+  background: var(--grid-line);
+  border-radius: 1px;
 }
 
 .sc-complete-badge {

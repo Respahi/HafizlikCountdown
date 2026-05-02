@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_DAYS    = 600
-const TOTAL_JUZ     = 30
-const PPJ           = 20   // pages per juz
+const TOTAL_DAYS = 600
+const TOTAL_JUZ = 30
+const PPJ = 20   // pages per juz
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function dayInfo(d) {
   return {
     month: Math.floor((d - 1) / TOTAL_JUZ) + 1,   // 1–20  (pages per day this cycle)
-    juz:   ((d - 1) % TOTAL_JUZ) + 1,              // 1–30  (which juz today)
+    juz: ((d - 1) % TOTAL_JUZ) + 1,              // 1–30  (which juz today)
   }
 }
 
@@ -29,13 +29,13 @@ function globalPage(j, r) {
 // ─── Component ───────────────────────────────────────────────────────────────
 export function SistemView() {
   // ── State ───────────────────────────────────────────────────────────────────
-  const dayRef      = useRef(1)
-  const [day, _setDay]    = useState(1)
-  const isAnimRef   = useRef(false)
-  const pdfRef      = useRef(null)
-  const canvasRef   = useRef(null)
+  const dayRef = useRef(1)
+  const [day, _setDay] = useState(1)
+  const isAnimRef = useRef(false)
+  const pdfRef = useRef(null)
+  const canvasRef = useRef(null)
 
-  const [animKey,   setAnimKey]   = useState(null)      // `${j},${r}` while pulsing
+  const [animKey, setAnimKey] = useState(null)      // `${j},${r}` while pulsing
   const [modalOpen, setModalOpen] = useState(false)
   const [modalCell, setModalCell] = useState(null)      // { j, r, page, pageInJuz }
   const [pdfStatus, setPdfStatus] = useState('idle')    // idle|loading|loaded|missing
@@ -79,15 +79,15 @@ export function SistemView() {
     if (!modalOpen || !modalCell || pdfStatus !== 'loaded') return
     const canvas = canvasRef.current
     if (!canvas) return
-    ;(async () => {
-      try {
-        const pg   = await pdfRef.current.getPage(modalCell.page)
-        const vp   = pg.getViewport({ scale: 1.5 })
-        canvas.width  = vp.width
-        canvas.height = vp.height
-        await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
-      } catch {}
-    })()
+      ; (async () => {
+        try {
+          const pg = await pdfRef.current.getPage(modalCell.page)
+          const vp = pg.getViewport({ scale: 1.5 })
+          canvas.width = vp.width
+          canvas.height = vp.height
+          await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+        } catch { }
+      })()
   }, [modalOpen, modalCell, pdfStatus, canvasKey])
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -134,8 +134,8 @@ export function SistemView() {
         return
       }
       if (e.key === 'ArrowRight' && !e.shiftKey) { e.preventDefault(); advance() }
-      if (e.key === 'ArrowLeft'  && !e.shiftKey) { e.preventDefault(); retreat() }
-      if (e.key === 'ArrowRight' &&  e.shiftKey) { e.preventDefault(); nextMonth() }
+      if (e.key === 'ArrowLeft' && !e.shiftKey) { e.preventDefault(); retreat() }
+      if (e.key === 'ArrowRight' && e.shiftKey) { e.preventDefault(); nextMonth() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -176,10 +176,10 @@ export function SistemView() {
       {/* Legend */}
       <div className="sc-legend">
         {[
-          ['sc-dot-ham',  'Ham Sayfa — Yeni Ezber'],
-          ['sc-dot-has',  'Has Sayfa — Tekrar'],
+          ['sc-dot-ham', 'Ham Sayfa — Yeni Ezber'],
+          ['sc-dot-has', 'Has Sayfa — Tekrar'],
           ['sc-dot-done', 'Tamamlandı'],
-          ['sc-dot-empty','Henüz Ezberlenmedi'],
+          ['sc-dot-empty', 'Henüz Ezberlenmedi'],
         ].map(([cls, label]) => (
           <div key={cls} className="sc-legend-item">
             <span className={`sc-dot ${cls}`} />
@@ -226,7 +226,7 @@ export function SistemView() {
               {/* Cells */}
               <div className="sc-grid">
                 {cellMeta.map(({ j, r }) => {
-                  const st   = cellState(j, r, day)
+                  const st = cellState(j, r, day)
                   const anim = animKey === `${j},${r}`
                   return (
                     <div
@@ -261,27 +261,20 @@ export function SistemView() {
 
         {/* ── Sidebar ── */}
         <div className="sc-sidebar">
-          <div className="sc-stat-card">
-            <div className="sc-stat-label">Günlük Tempo</div>
-            <div className="sc-stat-val sc-val-accent">{month}</div>
-            <div className="sc-stat-sub">'le gidiyor</div>
-          </div>
-          <div className="sc-stat-card">
-            <div className="sc-stat-label">Bugünkü Cüz</div>
-            <div className="sc-stat-frac">
-              <span className="sc-frac-n">{juz}</span>
-              <span className="sc-frac-d"> / 30</span>
+
+          {/* Kesirli gösterge — ana sayfadaki ile aynı dil */}
+          <div className="sc-stat-card sc-fraction-card">
+            <div className="sc-fraction-part">
+              <span className="scenario-fraction-label">Kaçla gidiyor</span>
+              <strong className="sc-fraction-big sc-val-accent">{month}</strong>
             </div>
-            <div className="sc-stat-sub">cüz</div>
-          </div>
-          <div className="sc-stat-card">
-            <div className="sc-stat-label">Geçen Ay</div>
-            <div className="sc-stat-frac">
-              <span className="sc-frac-n">{month}</span>
-              <span className="sc-frac-d"> / 20</span>
+            <div className="sc-fraction-line" />
+            <div className="sc-fraction-part">
+              <span className="scenario-fraction-label">Kaçıncı cüz</span>
+              <strong className="sc-fraction-big">{juz}</strong>
             </div>
-            <div className="sc-stat-sub">ay</div>
           </div>
+
           <div className="sc-stat-card">
             <div className="sc-stat-label">Toplam Gün</div>
             <div className="sc-stat-val">{day}</div>
