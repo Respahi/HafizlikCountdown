@@ -3812,9 +3812,12 @@ h2 {
   border: 1px solid rgba(17, 17, 17, 0.12);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: clamp(18px, 2vw, 28px);
+  padding: 18px 20px 20px;
   margin-top: 16px;
   overflow-x: auto;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .sistem-header {
@@ -3931,7 +3934,7 @@ h2 {
 }
 
 .sc-row-label {
-  height: 22px;
+  height: 26px;
   width: 22px;
   display: flex;
   align-items: center;
@@ -3948,7 +3951,7 @@ h2 {
 }
 
 .sc-col-label {
-  width: 22px;
+  width: 26px;
   font-size: 9px;
   color: rgba(105, 95, 88, 0.55);
   text-align: center;
@@ -3958,14 +3961,14 @@ h2 {
 /* Grid */
 .sc-grid {
   display: grid;
-  grid-template-columns: repeat(30, 22px);
+  grid-template-columns: repeat(30, 26px);
   gap: 2px;
 }
 
 /* Cells */
 .sc-cell {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
