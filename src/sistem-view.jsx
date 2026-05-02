@@ -36,6 +36,7 @@ export function SistemView() {
   const canvasRef = useRef(null)
 
   const [animKey, setAnimKey] = useState(null)      // `${j},${r}` while pulsing
+  const animTimerRef = useRef(null)                 // cancel pending anim-clear on rapid advance
   const [modalOpen, setModalOpen] = useState(false)
   const [modalCell, setModalCell] = useState(null)      // { j, r, page, pageInJuz }
   const [pdfStatus, setPdfStatus] = useState('idle')    // idle|loading|loaded|missing
@@ -91,15 +92,26 @@ export function SistemView() {
   }, [modalOpen, modalCell, pdfStatus, canvasKey])
 
   // ── Navigation ──────────────────────────────────────────────────────────────
+  const triggerAnim = useCallback((j, r) => {
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current)
+      animTimerRef.current = null
+    }
+    setAnimKey(`${j},${r}`)
+    animTimerRef.current = setTimeout(() => {
+      setAnimKey(null)
+      animTimerRef.current = null
+    }, 420)
+  }, [])
+
   const advance = useCallback(() => {
     if (isAnimRef.current) return
     const next = Math.min(TOTAL_DAYS, dayRef.current + 1)
     if (next === dayRef.current) return
     setDay(next)
     const { month, juz } = dayInfo(next)
-    setAnimKey(`${juz},${month}`)
-    setTimeout(() => setAnimKey(null), 400)
-  }, [setDay])
+    triggerAnim(juz, month)
+  }, [setDay, triggerAnim])
 
   const retreat = useCallback(() => {
     if (isAnimRef.current) return
@@ -108,6 +120,10 @@ export function SistemView() {
 
   const reset = useCallback(() => {
     isAnimRef.current = false
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current)
+      animTimerRef.current = null
+    }
     setDay(1)
     setAnimKey(null)
   }, [setDay])
@@ -115,6 +131,10 @@ export function SistemView() {
   const nextMonth = useCallback(async () => {
     if (isAnimRef.current || dayRef.current >= TOTAL_DAYS) return
     isAnimRef.current = true
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current)
+      animTimerRef.current = null
+    }
     const target = Math.min(TOTAL_DAYS, dayRef.current + 30)
     for (let d = dayRef.current + 1; d <= target; d++) {
       const { month, juz } = dayInfo(d)
