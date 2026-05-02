@@ -41,6 +41,14 @@ export function SegmentedTabs({ activeView, canOpenScenario, canOpenHistory }) {
       >
         Geçmişin Hesabı
       </button>
+      <button
+        className={`folder-tab ${activeView === 'sistem' ? 'folder-tab-active' : ''}`}
+        data-view-tab="sistem"
+        type="button"
+        onClick={() => handleSelect('sistem')}
+      >
+        Osmanlı Sistemi
+      </button>
     </div>
   )
 }

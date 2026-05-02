@@ -1330,7 +1330,7 @@ function recoverScenarioProgressIfInterrupted() {
     scenario.locked = false
     render()
 
-    if (scenario.mode === 'monthly') {
+    if (scenario.mode === 'monthly' || scenario.mode === 'annual') {
       scheduleScenarioAutoRun()
     }
     return
@@ -1628,7 +1628,10 @@ function openScenarioView() {
   render()
   recoverScenarioProgressIfInterrupted()
 
-  if (state.scenario?.mode === 'monthly' && !state.scenario.modalOpen) {
+  if (
+    (state.scenario?.mode === 'monthly' || state.scenario?.mode === 'annual')
+    && !state.scenario.modalOpen
+  ) {
     scheduleScenarioAutoRun()
   }
 }
@@ -1646,6 +1649,11 @@ function openHistoryView() {
   }
 
   state.view = 'history'
+  render()
+}
+
+function openSistemView() {
+  state.view = 'sistem'
   render()
 }
 
@@ -1884,6 +1892,11 @@ function renderTabbedPanels(nextView) {
 
   if (nextView === 'history') {
     openHistoryView()
+    return
+  }
+
+  if (nextView === 'sistem') {
+    openSistemView()
     return
   }
 
@@ -2541,6 +2554,7 @@ export {
   openMainView,
   openHistoryView,
   openScenarioView,
+  openSistemView,
   dismissScenarioModal,
   endOfMonth,
   endOfWeekSunday,
